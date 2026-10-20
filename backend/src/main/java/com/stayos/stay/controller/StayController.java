@@ -18,7 +18,12 @@ public class StayController {
     private final CheckInService checkIn;
     private final StayQueryService query;
     private final RoomCatalogService rooms;
-    public StayController(CheckInService checkIn,StayQueryService query,RoomCatalogService rooms) { this.checkIn=checkIn;this.query=query;this.rooms=rooms; }
+    private final CheckoutService checkout;
+    public StayController(CheckInService checkIn,StayQueryService query,RoomCatalogService rooms,CheckoutService checkout) { this.checkIn=checkIn;this.query=query;this.rooms=rooms;this.checkout=checkout; }
+    @PostMapping("/{id}/check-out")
+    public ApiResponse<?> checkout(@PathVariable long id,@RequestHeader(value="Idempotency-Key",required=false) String key,@Valid @RequestBody CheckoutRequest input,Authentication auth) {
+        return ApiResponse.ok(checkout.checkout(((SessionIdentity)auth.getPrincipal()).userId(),key,id,input));
+    }
     @PostMapping
     public ApiResponse<?> create(@RequestHeader(value="Idempotency-Key",required=false) String key,@Valid @RequestBody CheckIn input,Authentication auth) {
         return ApiResponse.ok(query.detail(checkIn.create(((SessionIdentity)auth.getPrincipal()).userId(),key,input)));

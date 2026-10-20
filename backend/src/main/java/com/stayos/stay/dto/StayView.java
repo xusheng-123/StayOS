@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 public class StayView {
-    public Long id,roomId,segmentId,createdBy;
+    public Long id,roomId,segmentId,createdBy,checkedOutBy;
     public String roomNumber,roomTypeName,status,operatorName,primaryGuestName,notes;
     public Integer guestCount;
     public OffsetDateTime checkInAt,expectedCheckOutAt,actualCheckOutAt,createdAt,updatedAt;

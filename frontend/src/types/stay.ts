@@ -8,5 +8,10 @@ export interface Stay {
   id: number; roomId: number; segmentId: number; roomNumber: string; roomTypeName: string
   status: 'IN_HOUSE' | 'CHECKED_OUT'; createdBy: number; operatorName: string; primaryGuestName: string
   guestCount: number; notes: string; checkInAt: string; expectedCheckOutAt: string
-  actualCheckOutAt: string | null; createdAt: string; updatedAt: string; guests: StayGuest[] | null
+  actualCheckOutAt: string | null; checkedOutBy: number | null; createdAt: string; updatedAt: string; guests: StayGuest[] | null
+}
+export interface CheckoutResult {
+  stayId: number; segmentId: number; roomId: number; taskId: number; checkedOutBy: number
+  roomNumber: string; roomTypeName: string; actualCheckOutAt: string
+  cleaningStatusAtCheckout: 'DIRTY'; taskStatusAtCreation: 'PENDING'
 }

@@ -33,7 +33,7 @@ StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统�
 
 前端：Vue 3 + TypeScript + Element Plus；后端：Java + Spring Boot；数据库：PostgreSQL；数据访问：MyBatis-Plus；身份权限：Spring Security；数据库迁移：Flyway；版本管理：Git。后端一个应用，按业务分模块，不使用微服务。
 
-第 1 阶段认证已经完成，见 [AUTHENTICATION.md](docs/AUTHENTICATION.md) 和 [PHASE1-DELIVERY.md](docs/PHASE1-DELIVERY.md)。第 2 阶段房型、房间及房态已完成，规则和接口见 [ROOMS.md](docs/ROOMS.md)，实际测试和交付见 [PHASE2-DELIVERY.md](docs/PHASE2-DELIVERY.md)。第 3 阶段入住规则与接口见 [CHECK-IN.md](docs/CHECK-IN.md)，验收结果见 [PHASE3-DELIVERY.md](docs/PHASE3-DELIVERY.md)。DEVELOPMENT 保留原始整体路线编号，用户最新阶段编号优先；退房、换房及清洁任务仍未开发。
+第 1 阶段认证已经完成，见 [AUTHENTICATION.md](docs/AUTHENTICATION.md) 和 [PHASE1-DELIVERY.md](docs/PHASE1-DELIVERY.md)。第 2 阶段房型、房间及房态已完成，规则和接口见 [ROOMS.md](docs/ROOMS.md)，实际测试和交付见 [PHASE2-DELIVERY.md](docs/PHASE2-DELIVERY.md)。第 3 阶段入住规则与接口见 [CHECK-IN.md](docs/CHECK-IN.md)，验收结果见 [PHASE3-DELIVERY.md](docs/PHASE3-DELIVERY.md)。DEVELOPMENT 保留原始整体路线编号，用户最新阶段编号优先；第 4 阶段已实现正式退房、自动清洁任务及只读任务列表，规则见 [CHECK-OUT.md](docs/CHECK-OUT.md)，验收结果见 [PHASE4-DELIVERY.md](docs/PHASE4-DELIVERY.md)；换房及清洁任务处理仍未开发。
 
 **未决事项等待规则：** 首个管理员、登录方式及第 2 阶段房间规则已确认；第 3 阶段已确认全部实际住客、证件/电话加密脱敏，以及 PostgreSQL 入住防重与 24 小时策略，见 CHECK-IN.md。真实试用的数据保留期限、身份核验、部署等仍按 PRD 第 9 节确认。触及未决事项或与已有功能冲突时立即暂停，等待明确反馈，不得把建议或沉默视为授权。按钮样式等普通细节可采用合理默认值并记录。
 

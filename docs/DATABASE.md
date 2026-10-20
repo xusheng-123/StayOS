@@ -169,6 +169,8 @@
 
 ### 4.9 `housekeeping_tasks`：清洁任务
 
+> 本节字段为完整清洁流程草案。第 4 阶段实际只实现退房自动任务和查询，实际列名/约束见本文末的第 4 阶段补充及 CHECK-OUT.md；未建立执行人、分配、完成、验收或任务日志表。
+
 | 字段 | 建议类型 | 用途 |
 |---|---|---|
 | `id` | BIGINT | 任务内部编号 |
@@ -341,3 +343,17 @@
 建议字段：`id`、`billing_record_id`、`amount`、`payment_method`、`paid_at`、`received_by`、`reference_number`（可选）、`notes`。第二阶段可先人工登记收款结果，不代表接入了第三方支付。
 
 【注释】应收与实收分开保存；押金、分次收款、退款及是否只允许全额结算等规则均在第二阶段确认，第一版不保存收款结果。
+
+
+## 第 4 阶段实际数据库补充
+
+新增 `V7__checkout_housekeeping.sql` 和 `V8__one_open_cleaning_task_per_room.sql`；V1—V6 保持原文件。V8 是 V7 已在隔离测试库执行后继续增加的约束，没有回写已执行迁移。
+
+- `housekeeping_tasks`：`id`、`room_id`、`task_type`、`source`、`source_id`、`stay_record_id`、`room_segment_id`、`status`、`created_by`、`created_at`、`notes`。目前仅 `CHECKOUT_CLEANING / CHECKOUT / PENDING`；`source_id=stay_record_id`，来源业务指本次入住的退房，来源段另用 `room_segment_id` 明确关联。
+- `UNIQUE(source,source_id)`：一次退房一个任务；`UNIQUE(room_segment_id)`：同一离房段不重复建任务；待处理任务的房间部分唯一索引：同房最多一个未完成任务。
+- 三列复合外键确保任务的使用段、入住、房间是同一组业务关系；所有业务外键限制删除，不级联删除入住历史。
+- 原 `idempotency_requests.operation` 允许 `CHECK_IN`、`CHECK_OUT`，沿用原主键、24 小时规则、内容摘要和 `result_stay_id`；不增加退房记录表，不保存完整请求或响应，不新建第二套幂等表。
+- `room_operational_facts.has_open_cleaning_task` 改为查询真实 PENDING 任务；`occupied` 仍从未结束使用段推导。`rooms.cleaning_status` 仍是唯一清洁状态字段，任务只记录处理进度。
+- 所有本阶段任务均未分配，属于客房部可读的未分配任务池，不含住客资料。第 5 阶段新增任务状态时需增量扩展状态约束、未完成索引和房态视图，保持三者一致。
+
+详细设计和验收证据见 [CHECK-OUT.md](CHECK-OUT.md)、[PHASE4-DELIVERY.md](PHASE4-DELIVERY.md)。

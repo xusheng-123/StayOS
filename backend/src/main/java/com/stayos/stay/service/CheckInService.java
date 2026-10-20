@@ -1,6 +1,5 @@
 package com.stayos.stay.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stayos.audit.AuditService;
 import com.stayos.common.ApiException;
 import com.stayos.room.mapper.RoomMapper;
@@ -17,9 +16,9 @@ public class CheckInService {
     private final RoomMapper rooms;
     private final GuestProtection protection;
     private final AuditService audit;
-    private final ObjectMapper json;
-    public CheckInService(StayMapper stays,RoomMapper rooms,GuestProtection protection,AuditService audit,ObjectMapper json) {
-        this.stays=stays;this.rooms=rooms;this.protection=protection;this.audit=audit;this.json=json;
+    private final IdempotencyService requests;
+    public CheckInService(StayMapper stays,RoomMapper rooms,GuestProtection protection,AuditService audit,IdempotencyService requests) {
+        this.stays=stays;this.rooms=rooms;this.protection=protection;this.audit=audit;this.requests=requests;
     }
     private static String text(String s) { return s==null?"":s.trim(); }
     private static ApiException invalid(String message) { return new ApiException(400,"VALIDATION_ERROR",message); }
@@ -45,19 +44,9 @@ public class CheckInService {
     }
     @Transactional
     public long create(long actor,String requestKey,CheckIn raw) {
-        if(requestKey==null || !requestKey.matches("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
-            throw new ApiException(400,"IDEMPOTENCY_KEY_REQUIRED","请提供有效的入住请求标识");
-        String key=UUID.fromString(requestKey).toString();CheckIn input=normalize(raw);String hash;
-        try { hash=protection.fingerprint(json.writeValueAsBytes(input)); }
-        catch(com.fasterxml.jackson.core.JsonProcessingException ignored) { throw invalid("入住请求无法处理"); }
-        // ON CONFLICT waits for an in-flight transaction. Nothing is committed on any failure.
-        if(stays.reserve(actor,key,hash)==0) {
-            var old=stays.request(actor,key);
-            if(old.expired) throw new ApiException(409,"IDEMPOTENCY_KEY_EXPIRED","原入住请求已超过 24 小时，请先查询入住记录再确认是否需要新操作");
-            if(!old.requestHash.equals(hash)) throw new ApiException(409,"IDEMPOTENCY_MISMATCH","同一请求标识不能提交不同内容，请确认原操作结果");
-            if(old.resultStayId==null) throw new ApiException(409,"REQUEST_IN_PROGRESS","入住正在处理中，请稍后重试原请求");
-            return old.resultStayId;
-        }
+        CheckIn input=normalize(raw);
+        Long previous=requests.reserve(actor,"CHECK_IN",requestKey,input);
+        if(previous!=null) return previous;
         if(rooms.lock(input.roomId())==null) throw new ApiException(404,"ROOM_NOT_FOUND","房间不存在");
         var room=rooms.detail(input.roomId());
         if(!room.canCheckIn) {
@@ -77,7 +66,7 @@ public class CheckInService {
         }
         stays.segment(id,room.id,room.roomNumber,room.roomTypeName,now);
         audit.success(actor,"CHECK_IN","STAY",id);
-        stays.complete(actor,key,id);
+        requests.complete(actor,"CHECK_IN",requestKey,id);
         return id;
     }
 }

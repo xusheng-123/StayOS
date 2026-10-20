@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/me", "/api/auth/status", "/api/auth/logout", "/api/workspaces/**", "/api/users/**", "/api/roles").authenticated()
                 .requestMatchers("/api/room-types", "/api/room-types/**", "/api/rooms", "/api/rooms/**", "/api/room-status", "/api/room-status/**", "/api/floors").authenticated()
                 .requestMatchers("/api/stays", "/api/stays/**").authenticated()
+                .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors
                 .authenticationEntryPoint((request, response, e) -> write(response, json, 401, "UNAUTHORIZED", "请重新登录"))

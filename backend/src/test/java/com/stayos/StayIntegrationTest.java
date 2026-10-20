@@ -199,7 +199,9 @@ class StayIntegrationTest {
         assertThat(data(front.get("/api/stays")).path("total").asInt()).isZero();
         assertThat(data(front.get("/api/stays/history")).path("items").get(0).path("id").asLong()).isEqualTo(id);
         assertThat(data(front.get("/api/stays/"+id)).path("status").asText()).isEqualTo("CHECKED_OUT");
-        assertThat(front.request("POST","/api/stays/"+id+"/check-out",Map.of(),key()).statusCode()).isEqualTo(404);
+        // Closed historical fixtures cannot be checked out again through the new phase-4 API.
+        long segment=jdbc.queryForObject("select id from stay_room_segments where stay_record_id=?",Long.class,id);
+        assertThat(front.request("POST","/api/stays/"+id+"/check-out",Map.of("segmentId",segment),key()).statusCode()).isEqualTo(409);
     }
     @Test void invalidParametersAndMissingRecordsReturnSafeErrors() throws Exception {
         var front=login("FRONT_DESK");

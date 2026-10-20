@@ -14,6 +14,7 @@ const router = createRouter({
       { path: 'stays/history', component: () => import('../views/StayListView.vue'), meta: { permission: 'stay:manage' } },
       { path: 'stays', component: () => import('../views/StayListView.vue'), meta: { permission: 'stay:manage' } },
       { path: 'stays/:id', component: () => import('../views/StayDetailView.vue'), meta: { permission: 'stay:manage' } },
+      { path: 'housekeeping/tasks', component: () => import('../views/HousekeepingTasksView.vue'), meta: { permission: 'housekeeping:read' } },
       { path: 'manage/rooms', component: () => import('../views/RoomManageView.vue'), meta: { permission: 'room:manage' } },
       { path: 'manage/room-types', component: () => import('../views/RoomTypeManageView.vue'), meta: { permission: 'room:manage' } },
       { path: 'forbidden', component: () => import('../views/ForbiddenView.vue') },
