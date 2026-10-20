@@ -20,7 +20,7 @@ StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统�
 - 清洁任务仅“待处理 → 清洁中 → 已完成”，第一版无主管验收、退回整改和住中清洁。
 - 未分配任务只能由客房主管/总经理分配，支持以员工为中心批量分房；所有角色自主领取已关闭，ADMIN 不获得客房业务权限。执行人无法继续时，主管/总经理可填写原因、记录交接受控接管清洁中任务，保留原开始时间；接管不直接完成任务或开放房间，仅新执行人可完成。不允许普通清洁中改派。
 - 一次入住同时使用一间房，可以多次换房。`stay_room_segments` 保存每段房间使用时间，当前房间不靠覆盖历史房号表达。
-- 因影响入住的故障换房必须先上报或关联原房尚未解决的阻止异常，不能只填写故障原因文字；换房失败不删除此前已上报异常。
+- 换房原因说明必填，ROOM_ISSUE 可选关联真实原房异常；不要求所有故障换房先建异常。异常与维修事实独立保留，换房不代替故障上报或处理。
 - 退房和换房均自动创建关联原房间使用记录的清洁任务；同一来源不重复建任务，同房间最多一个未完成任务。
 - 房间是否可入住统一结合档案启用、当前占用、清洁状态、未解决的入住阻止及未完成清洁任务判断。新房默认待清洁，完成任务后才能分配。
 - 员工可上报阻止入住的异常，主管/总经理确认解决。清洁完成不解除故障，故障解决不自动清洁合格，已入住异常不自动退房。
@@ -33,7 +33,7 @@ StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统�
 
 前端：Vue 3 + TypeScript + Element Plus；后端：Java + Spring Boot；数据库：PostgreSQL；数据访问：MyBatis-Plus；身份权限：Spring Security；数据库迁移：Flyway；版本管理：Git。后端一个应用，按业务分模块，不使用微服务。
 
-第 1 阶段认证已经完成，见 [AUTHENTICATION.md](docs/AUTHENTICATION.md) 和 [PHASE1-DELIVERY.md](docs/PHASE1-DELIVERY.md)。第 2 阶段房型、房间及房态已完成，规则和接口见 [ROOMS.md](docs/ROOMS.md)，实际测试和交付见 [PHASE2-DELIVERY.md](docs/PHASE2-DELIVERY.md)。第 3 阶段入住规则与接口见 [CHECK-IN.md](docs/CHECK-IN.md)，验收结果见 [PHASE3-DELIVERY.md](docs/PHASE3-DELIVERY.md)。DEVELOPMENT 保留原始整体路线编号，用户最新阶段编号优先；第 4 阶段已实现正式退房、自动清洁任务及只读任务列表，规则见 [CHECK-OUT.md](docs/CHECK-OUT.md)，验收结果见 [PHASE4-DELIVERY.md](docs/PHASE4-DELIVERY.md)。第 5 阶段已实现人工清洁、人员批量分房、受控接管、开始/完成、历史及房态闭环，见 [HOUSEKEEPING.md](docs/HOUSEKEEPING.md) 和 [PHASE5-DELIVERY.md](PHASE5-DELIVERY.md)；第 6 阶段异常及维修停用见 [ROOM-ISSUES.md](docs/ROOM-ISSUES.md) 和 [PHASE6-DELIVERY.md](PHASE6-DELIVERY.md)。第 7 阶段再开发换房。
+第 1 阶段认证已经完成，见 [AUTHENTICATION.md](docs/AUTHENTICATION.md) 和 [PHASE1-DELIVERY.md](docs/PHASE1-DELIVERY.md)。第 2 阶段房型、房间及房态已完成，规则和接口见 [ROOMS.md](docs/ROOMS.md)，实际测试和交付见 [PHASE2-DELIVERY.md](docs/PHASE2-DELIVERY.md)。第 3 阶段入住规则与接口见 [CHECK-IN.md](docs/CHECK-IN.md)，验收结果见 [PHASE3-DELIVERY.md](docs/PHASE3-DELIVERY.md)。DEVELOPMENT 保留原始整体路线编号，用户最新阶段编号优先；第 4 阶段已实现正式退房、自动清洁任务及只读任务列表，规则见 [CHECK-OUT.md](docs/CHECK-OUT.md)，验收结果见 [PHASE4-DELIVERY.md](docs/PHASE4-DELIVERY.md)。第 5 阶段已实现人工清洁、人员批量分房、受控接管、开始/完成、历史及房态闭环，见 [HOUSEKEEPING.md](docs/HOUSEKEEPING.md) 和 [PHASE5-DELIVERY.md](PHASE5-DELIVERY.md)；第 6 阶段异常及维修停用见 [ROOM-ISSUES.md](docs/ROOM-ISSUES.md) 和 [PHASE6-DELIVERY.md](PHASE6-DELIVERY.md)。第 7 阶段正式换房已实现，实际规则见 [ROOM-CHANGES.md](docs/ROOM-CHANGES.md)，交付见 [PHASE7-DELIVERY.md](PHASE7-DELIVERY.md)。
 
 **未决事项等待规则：** 首个管理员、登录方式及第 2 阶段房间规则已确认；第 3 阶段已确认全部实际住客、证件/电话加密脱敏，以及 PostgreSQL 入住防重与 24 小时策略，见 CHECK-IN.md。真实试用的数据保留期限、身份核验、部署等仍按 PRD 第 9 节确认。触及未决事项或与已有功能冲突时立即暂停，等待明确反馈，不得把建议或沉默视为授权。按钮样式等普通细节可采用合理默认值并记录。
 

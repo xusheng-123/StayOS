@@ -17,4 +17,12 @@ public class TaskCreationService {
         log.operatorId=actor;log.operatedAt=time;log.reason="";log.taskVersion=0L;
         if(mapper.log(log)!=1) throw new IllegalStateException("Checkout task history was not saved");
     }
+    @Transactional(propagation=Propagation.MANDATORY)
+    public long fromRoomChange(long room,long stay,long segment,long change,long actor,OffsetDateTime time) {
+        if(mapper.createRoomChange(room,stay,segment,change,actor,time)!=1) throw new IllegalStateException("Room change task missing");
+        long id=mapper.roomChangeId(change);
+        var log=new TaskLog();log.taskId=id;log.action="AUTO_CREATE";log.toStatus="PENDING";
+        log.operatorId=actor;log.operatedAt=time;log.reason="";log.taskVersion=0L;
+        if(mapper.log(log)!=1) throw new IllegalStateException("Room change task history missing");return id;
+    }
 }

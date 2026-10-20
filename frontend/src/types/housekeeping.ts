@@ -1,7 +1,7 @@
 export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
 export interface HousekeepingTask {
   id: number; roomId: number; roomNumber: string; floor: number; roomTypeName: string
-  taskType: 'CHECKOUT_CLEANING' | 'MANUAL_CLEANING'; source: 'CHECKOUT' | 'MANUAL'; status: TaskStatus
+  taskType: 'CHECKOUT_CLEANING' | 'MANUAL_CLEANING' | 'ROOM_CHANGE_CLEANING'; source: 'CHECKOUT' | 'MANUAL' | 'ROOM_CHANGE'; status: TaskStatus
   createdAt: string; createdBy: number; notes: string; completionNotes: string; version: number
   assignedTo: number | null; assignedBy: number | null; assigneeName: string | null
   assignedAt: string | null; claimedAt: string | null; startedAt: string | null; completedAt: string | null

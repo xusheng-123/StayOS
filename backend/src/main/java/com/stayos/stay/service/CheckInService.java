@@ -49,11 +49,7 @@ public class CheckInService {
         if(previous!=null) return previous;
         if(rooms.lock(input.roomId())==null) throw new ApiException(404,"ROOM_NOT_FOUND","房间不存在");
         var room=rooms.detail(input.roomId());
-        if(!room.canCheckIn) {
-            String reason=!room.enabled?"房间已停用":room.occupied?"房间已被占用":room.hasBlockingIssue?"房间正在维修或存在阻止入住的异常":
-                !room.cleaningStatus.equals("CLEAN")?"房间尚未完成清洁":room.hasOpenCleaningTask?"房间仍有未完成清洁任务":"房间当前不可入住";
-            throw new ApiException(409,"ROOM_NOT_AVAILABLE",reason);
-        }
+        com.stayos.room.service.RoomEligibility.requireAvailable(room);
         OffsetDateTime now=OffsetDateTime.now(ZoneOffset.UTC);
         if(!input.expectedCheckOutAt().isAfter(now)) throw invalid("预计退房时间必须晚于服务器记录的实际入住时间");
         var row=new HashMap<String,Object>();row.put("checkInAt",now);row.put("expectedCheckOutAt",input.expectedCheckOutAt());row.put("actor",actor);row.put("notes",input.notes());

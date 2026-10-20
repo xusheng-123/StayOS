@@ -2,11 +2,11 @@
 
 > **这份文档是做什么的？** 它约定前端页面如何向后端请求数据，以及后端会返回什么。可以把“接口/API”理解成网页和服务器之间的办事窗口：网页提交请求，服务器验证规则、处理业务，再把结果返回。
 >
-> **初学者提醒：** 本文同时保留实际接口和后续设计草案。已实现部分按下方“当前实现进度”及各节标注识别；未实现的换房等示例不能当作已经运行的程序。
+> **初学者提醒：** 本文同时保留实际接口和后续设计草案。已实现部分按下方“当前实现进度”及各节标注识别；未实现的后续扩展示例不能当作已经运行的程序。
 
 > **版本边界：** 第 4—10 节及第 11 节的管理/历史接口属于第一版。第 12 节为第二阶段收费参考，第一版不实现、不提供空接口或页面；退房不要求账单、支付信息或结算状态。第一版无主管验收、住中清洁、预订和续住接口。
 
-> **当前实现进度：** 第 1 阶段完成认证及账号/角色；第 2 阶段完成房间与房态，见 ROOMS.md；第 3 阶段入住、当前与历史入住查询见 CHECK-IN.md 和第 6 节。第 4 阶段退房见 CHECK-OUT.md；第 5 阶段清洁处理及人员批量分房见 HOUSEKEEPING.md 和根目录 PHASE5-BATCH-ASSIGNMENT-DELIVERY.md（PHASE5-DELIVERY 为优化前快照）；第 6 阶段异常及维修停用已实现，见 ROOM-ISSUES.md；换房仍未开发。各阶段交付文档是当时的验收快照。
+> **当前实现进度：** 第 1 阶段完成认证及账号/角色；第 2 阶段完成房间与房态，见 ROOMS.md；第 3 阶段入住、当前与历史入住查询见 CHECK-IN.md 和第 6 节。第 4 阶段退房见 CHECK-OUT.md；第 5 阶段清洁处理及人员批量分房见 HOUSEKEEPING.md 和根目录 PHASE5-BATCH-ASSIGNMENT-DELIVERY.md（PHASE5-DELIVERY 为优化前快照）；第 6 阶段异常及维修停用已实现，见 ROOM-ISSUES.md；第7阶段正式换房见ROOM-CHANGES.md和第8节。各阶段交付文档是当时的验收快照。
 
 ## 1. 什么是接口？
 
@@ -205,33 +205,19 @@
 
 同操作人、同操作类型、同标识、同内容在 24 小时内返回既有结果；不同内容拒绝；过期旧标识拒绝且保留。更换标识再次退房返回 `STAY_ALREADY_CHECKED_OUT`；过期使用段返回 `STALE_ROOM_SEGMENT`。失败不保留成功结果，可修复后用原标识重试。完整流程及错误码见 [CHECK-OUT.md](CHECK-OUT.md)。
 
-## 8. 换房接口
+## 8. 正式换房接口（第7阶段已实现）
 
-| 方法 | 路径（建议） | 用途 | 允许角色 |
-|---|---|---|---|
-| POST | `/api/stays/{stayId}/room-change` | 办理换房 | 前台、酒店总经理 |
-| GET | `/api/stays/{stayId}/room-changes` | 查询换房历史 | 前台、酒店总经理 |
+实际参数、返回值、事务和重试见 [ROOM-CHANGES.md](ROOM-CHANGES.md)。仅前台与总经理，沿用 stay:manage、Session/CSRF；POST带Idempotency-Key。
 
-请求示例：
+- GET `/api/stays/{id}/room-change/available-rooms`：原有效入住的目标筛选，复用统一可入住性。
+- POST `/api/stays/{id}/room-changes`：`{segmentId,targetRoomId,reasonType,reason,issueId?}`。
+- GET `/api/stays/{id}/room-changes`：同次入住完整换房历史。
+- GET `/api/stays/room-changes/result/{key}`：只查本人成功回执，不重执行业务。
+- 原 GET `/api/stays/{id}` 新增 `roomSegments`、`roomChanges`，当前房显示最新实际使用段。
 
-```json
-{
-  "fromSegmentId": 20001,
-  "toRoomId": 10005,
-  "reasonType": "BLOCKING_ISSUE",
-  "reason": "空调故障",
-  "blockingIssueId": 30001,
-  "notes": "演示数据"
-}
-```
+reasonType 为 GUEST_REQUEST/ROOM_ISSUE/OTHER，说明必填；ROOM_ISSUE 的 issueId 选填，提供时验证属于原房，不要求严重或未解决。最新第7阶段指令取代 NORMAL/BLOCKING_ISSUE 及强制关联旧草案。换房不修改异常、维修或住客名单，不新增入住和收费。
 
-后端核对 `fromSegmentId` 仍是当前段、目标房不是原房且满足统一可入住条件。同一事务关闭原段、建立新段、写换房历史、原房标记 `DIRTY`、创建关联原段的 `ROOM_CHANGE` 清洁任务和成功审计；原房故障阻止不解除。任一步失败全部回滚，本次入住保持 `IN_HOUSE`。
-
-`reasonType` 必填且只能为 `NORMAL` 或 `BLOCKING_ISSUE`。普通换房不关联异常，`blockingIssueId` 为空；影响入住的故障换房必须选择 `BLOCKING_ISSUE`，先通过异常上报接口创建记录或选择已有异常，再传其 ID。后端在换房事务中核对异常属于原房、状态为 `OPEN/IN_PROGRESS` 且严重程度为 `CRITICAL`（换房在第 7 阶段实现时核对；不再使用旧 blocksCheckIn 字段）；缺失、他房、已解决或不阻止入住的异常均拒绝。不能用 `reason` 自由文字代替异常登记，也不从文字自动推断类别。
-
-异常上报与换房是先后两次请求，上报失败不得继续；换房失败保留之前已上报异常，不执行删除补偿。异常若在提交前被解决，故障换房应返回冲突，不能用过期异常继续办理。
-
-成功返回换房记录 ID、新旧房间使用记录 ID、房间摘要、服务器生成的换房时间和原房清洁任务 ID。换房历史返回每次原房、新房、原因、操作人和时间，房间使用历史返回每段进入/离开时间，不覆盖原房号。重复同一请求返回既有结果；换用新请求标识重放旧原段时也必须拒绝。
+同事务关闭原段、建立新段、写换房事实、原房DIRTY、创建唯一ROOM_CHANGE清洁任务/历史、审计及幂等结果。原房异常停用保留，目标必须真正可入住。服务器统一时间，旧段校验，入住→房间ID升序→使用段的锁顺序；同内容原标识24小时内重放原结果，即使原段已经关闭；不同内容或过期旧标识拒绝。
 
 ## 9. 清洁任务接口（第 5 阶段已实现）
 
@@ -362,8 +348,7 @@
 | `ROOM_NOT_AVAILABLE` | 房间当前不可入住 | 请重新选择房间 |
 | `STAY_ALREADY_CHECKED_OUT` | 入住记录已经退房 | 该记录已办理退房 |
 | `STAY_ROOM_CHANGED` | 请求中的原房间使用记录已不是当前段 | 房间已变更，请刷新后再操作 |
-| `BLOCKING_ISSUE_REQUIRED` | 故障换房未关联阻止入住的异常 | 请先上报或选择原房未解决的阻止异常 |
-| `BLOCKING_ISSUE_INVALID` | 关联异常属于他房、已解决或不阻止入住 | 异常状态已变化，请重新核对 |
+| `ROOM_CHANGE_CONFLICT` | 入住结束、目标等于原房、来源冲突任务或异常不匹配 | 核对入住及关联异常后刷新重试 |
 | `ISSUE_TYPE_INVALID` | 异常类型不在白名单内 | 请选择有效的异常类型 |
 | `TASK_ALREADY_EXISTS` | 已有对应来源或同房间的未完成任务 | 请查看已有清洁任务 |
 | `TASK_ALREADY_ASSIGNED` | 未分配任务已被其他主管分配 | 任务已分配，请刷新 |

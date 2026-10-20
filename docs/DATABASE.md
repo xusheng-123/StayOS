@@ -157,22 +157,20 @@
 
 示例：入住 S001 先使用 801，换到 805，再退房，共保留两段记录，历史不会被新房号覆盖。
 
-### 4.8 `room_change_records`：换房历史
+### 4.8 `room_changes`：换房历史（V12已实现）
 
-建议字段：`id`、`stay_record_id`、`from_segment_id`、`to_segment_id`、`reason_type`、`reason`、`blocking_issue_id`、`changed_by`、`changed_at`、`notes`。时间类型为 `TIMESTAMPTZ`；原房、新房由对应使用记录关联得到，不在多个表中重复维护当前房间。
+实际表为 room_changes，详见 [ROOM-CHANGES.md](ROOM-CHANGES.md)。字段包括 id/stay_record_id、old/new_room_id、old/new_segment_id、reason_type/reason、可选issue_id、changed_at/operated_by/created_at，原新房号与房型快照。原因 GUEST_REQUEST/ROOM_ISSUE/OTHER，说明必填；异常仅ROOM_ISSUE下选填，须属于原房。最新阶段指令取代旧强制关联阻止异常草案。
 
-每次换房新增一条记录，两段必须属于同一次入住且房间不同；原段已结束，新段从换房时间开始。对 `from_segment_id`、`to_segment_id` 各设置唯一约束，避免同一段重复换出或重复换入。请求携带原段 ID，若已不是当前段则拒绝，避免旧页面重复换房。
-
-`reason_type` 为 `NORMAL` 或 `BLOCKING_ISSUE`。普通换房的 `blocking_issue_id` 为空；因影响入住的异常换房必须关联 `room_issues.id`，办理时在事务中锁定并核对：异常属于原房、状态非 `RESOLVED` 且严重程度为 `CRITICAL`（第 7 阶段换房实现时再核对其余关联规则）。本地检查约束保证类别与空值关系，跨表含义由业务事务保证。
-
-异常先通过上报接口保存，不能只把故障写进 `reason`。换房失败不删除已上报异常，原房清洁完成也不解除异常。关联的异常后来解决时保留换房历史引用，不级联删除。
+两组复合外键绑定同一次入住的真实房/段，原段和新段分别唯一；原新房不同。插入触发器核对旧段结束原因为ROOM_CHANGE，旧退出时间等于新进入时间和换房时间、快照一致。当前占用仍只由有效stay_room_segments派生，原有部分唯一索引不变。
 
 ### 4.9 `housekeeping_tasks`：清洁任务（第 5 阶段实际结构）
 
-原 V7/V8 表增量扩展为退房和人工任务。实际字段及约束见 [HOUSEKEEPING.md](HOUSEKEEPING.md) 与 `V9__housekeeping_workflow.sql`。
+原 V7/V8 表增量扩展为退房、人工及V12换房任务。实际字段及约束见 [HOUSEKEEPING.md](HOUSEKEEPING.md) 与 `V9__housekeeping_workflow.sql`。
 
 - 来源 `CHECKOUT` 配 `CHECKOUT_CLEANING`，`source_id=stay_record_id`，三项来源关联必填；保留 `room_segment_id/stay_record_id/room_id` 复合外键，不能关联无关房间或入住。
 - 来源 `MANUAL` 配 `MANUAL_CLEANING`，`source_id/stay_record_id/room_segment_id` 必须全部为空，真实房间/创建人及非空 `notes` 原因必填。
+- V12来源 `ROOM_CHANGE` 配 `ROOM_CHANGE_CLEANING`，source_id=room_change_id且真实入住、原段、原房必填，以复合外键匹配room_changes；保留来源唯一/段唯一/同房未完成唯一。CHECKOUT和MANUAL不得填写room_change_id。
+- V12共用幂等新增result_room_change_id外键、ROOM_CHANGE操作及互斥结果约束；旧业务结果保持兼容。
 - 状态 `PENDING/IN_PROGRESS/COMPLETED`；未完成房间部分唯一索引同时覆盖前两种状态，完成历史允许保留并再次建任务。
 - `assigned_to/assigned_by/assigned_at/claimed_at` 保存当前归属；`started_by/started_at` 保存最初开始事实；`completed_by/completed_at/completion_notes` 保存最终完成事实，`version` 防止旧页面覆盖。
 - 自主领取已关闭，claimed_at 与历史 CLAIM 仅兼容既有数据。主管分配后仍 PENDING，开始才 CLEANING；清洁中重新分配必须带原因，保留原开始时间/人员并记录交接。完成仅当前负责人，时间和人员组合由数据库检查约束保护。
@@ -248,7 +246,7 @@ idempotency_requests 新增两种日志结果外键和操作白名单，原有�
 
 ## 8. 已确定规则与待确认边界
 
-清洁不验收、仅主管/总经理手动或批量分房、受控接管、故障换房关联阻止异常、固定异常类型规则、房间使用分段、异常解决权限和收费分期均已确定，见 PRD，不再反复确认。第一版不按预计退房时间自动创建任务或自动调整优先级。
+清洁不验收、仅主管/总经理手动或批量分房、受控接管、换房可选关联真实原房异常、固定异常类型规则、房间使用分段、异常解决权限和收费分期均已确定，见 PRD，不再反复确认。第一版不按预计退房时间自动创建任务或自动调整优先级。
 
 2026-10-20 已确认单酒店、房号全局唯一、无楼栋、非零整数楼层（地下层为负数）；无使用历史可改房号，已有历史禁止直接改号。首个管理员采用一次性终端初始化。第 3 阶段又确认全部实际住客、证件与电话加密及入住幂等策略，见 CHECK-IN.md；真实试用的数据保留期限、身份核验等仍按 PRD 第 9 节暂停确认。房间实际迁移与视图规则见 ROOMS.md，房型和房间均有防覆盖版本号。同住人通过独立关联表登记，不复制入住记录占用同一房间。
 

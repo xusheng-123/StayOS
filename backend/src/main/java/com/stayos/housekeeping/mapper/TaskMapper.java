@@ -13,6 +13,12 @@ public interface TaskMapper {
     @Select("select id from housekeeping_tasks where source='CHECKOUT' and source_id=#{stay}") Long checkoutId(long stay);
     @Insert("insert into housekeeping_tasks(room_id,task_type,source,created_by,created_at,notes) values(#{roomId},'MANUAL_CLEANING','MANUAL',#{createdBy},#{createdAt},#{notes})")
     @Options(useGeneratedKeys=true,keyProperty="id") int manual(TaskView task);
+    @Insert("""
+        insert into housekeeping_tasks(room_id,task_type,source,source_id,room_change_id,stay_record_id,room_segment_id,created_by,created_at)
+        values(#{room},'ROOM_CHANGE_CLEANING','ROOM_CHANGE',#{change},#{change},#{stay},#{segment},#{actor},#{time})
+        """)
+    int createRoomChange(@Param("room") long room,@Param("stay") long stay,@Param("segment") long segment,@Param("change") long change,@Param("actor") long actor,@Param("time") OffsetDateTime time);
+    @Select("select id from housekeeping_tasks where source='ROOM_CHANGE' and source_id=#{change}") Long roomChangeId(long change);
     String VIEW="""
         select t.*,r.room_number,r.floor,rt.type_name room_type_name,u.display_name assignee_name
         from housekeeping_tasks t join rooms r on r.id=t.room_id join room_types rt on rt.id=r.room_type_id

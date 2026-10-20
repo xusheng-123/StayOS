@@ -9,5 +9,7 @@ public class StayView {
     public Integer guestCount;
     public OffsetDateTime checkInAt,expectedCheckOutAt,actualCheckOutAt,createdAt,updatedAt;
     public List<Guest> guests;
+    public List<RoomChangeDtos.Segment> roomSegments;
+    public List<RoomChangeDtos.Result> roomChanges;
     public record Guest(Long id,String name,String documentType,String documentNumber,String phone,String notes,boolean primary) {}
 }
