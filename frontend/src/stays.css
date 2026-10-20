@@ -1,0 +1,21 @@
+.stay-section { margin-bottom: 22px; }
+.stay-section h2 { font-size: 16px; margin-top: 0; }
+.stay-alert { margin-bottom: 18px; }
+.stay-room-filters { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; margin-bottom: 20px; }
+.stay-room-grid { min-height: 30px; }
+.stay-room-choice { border: 1px solid #dce6de; border-radius: 10px; padding: 12px; }
+.stay-room-choice.selected { border-color: #23665a; background: #eff7f0; box-shadow: 0 0 0 1px #23665a; }
+.stay-room-choice > button:first-child { display: flex; gap: 10px; flex-direction: column; align-items: flex-start; width: 100%; border: 0; background: transparent; padding: 6px; color: inherit; text-align: left; cursor: pointer; }
+.stay-room-choice strong { font-size: 25px; max-width: 100%; overflow-wrap: anywhere; }.stay-room-choice span { font-size: 12px; max-width: 100%; overflow-wrap: anywhere; }
+.stay-room-choice > button:disabled { cursor: default; opacity: .65; }
+.stay-selected { padding: 14px 0 0; font-size: 14px; }
+.stay-guest { border-top: 1px solid #e4ebe4; padding-top: 18px; margin-top: 18px; }
+.stay-guest h3 { font-size: 14px; margin: 0; }
+.stay-guest-fields { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1fr; gap: 16px; }
+.stay-submit { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 20px; background: #fff; border: 1px solid #e1e8df; border-radius: 12px; }
+.stay-list-filters { grid-template-columns: 1fr 1fr 2fr auto; }
+.stay-page .el-date-editor { max-width: 100%; width: 100%; }
+.stay-page .el-descriptions__label { width: 145px; }.stay-page .el-descriptions__content { overflow-wrap: anywhere; }
+.stay-masked-guest p { color: #586d60; font-size: 13px; }.stay-guests-title { margin-top: 26px !important; }
+@media (max-width: 1200px) { .stay-guest-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }.stay-list-filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 650px) { .stay-room-filters,.stay-guest-fields { grid-template-columns: 1fr; }.stay-list-filters { grid-template-columns: 1fr; }.stay-submit { flex-direction: column; align-items: stretch; }.stay-submit > div { display: flex; flex-wrap: wrap; gap: 8px; }.stay-section { padding: 16px; }.stay-selected .subtle { display: block; margin-top: 8px; } }

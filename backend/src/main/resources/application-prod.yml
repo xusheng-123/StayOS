@@ -1,0 +1,6 @@
+# The production reverse proxy must terminate HTTPS on the same public site.
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true

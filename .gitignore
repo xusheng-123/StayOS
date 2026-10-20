@@ -1,0 +1,25 @@
+.env
+.env.*
+!.env.example
+.local/
+backend/target/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+.idea/
+.vscode/
+*.log
+*.iml
+/测试账号.md
+
+# Local data snapshots, database backups and private key files.
+/StayOS房型与房间清单.xlsx
+/backups/
+*.dump
+*.backup
+*.bak
+*.key
+*.pem
+*.p12
+*.pfx

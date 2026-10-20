@@ -1,0 +1,35 @@
+name: stayos
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${STAYOS_DB_NAME:-stayos}
+      POSTGRES_USER: ${STAYOS_DB_USER:-stayos}
+      POSTGRES_PASSWORD: ${STAYOS_DB_PASSWORD:?Generate .env using scripts/init-local.ps1}
+    ports:
+      - "127.0.0.1:${STAYOS_DB_PORT:-15432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  postgres-test:
+    image: postgres:17-alpine
+    profiles: [test]
+    environment:
+      POSTGRES_DB: stayos_test
+      POSTGRES_USER: ${STAYOS_DB_USER:-stayos}
+      POSTGRES_PASSWORD: ${STAYOS_DB_PASSWORD:?Generate .env using scripts/init-local.ps1}
+    ports:
+      - "127.0.0.1:${STAYOS_TEST_DB_PORT:-15433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d stayos_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  pgdata:

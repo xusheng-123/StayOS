@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${STAYOS_TEST_DB_PORT:15433}/stayos_test
+server:
+  port: 0
+logging:
+  level:
+    root: WARN
+stayos:
+  guests:
+    # TEST ONLY. Never used by application.yml or a developer/production database.
+    encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+  auth:
+    ip-limit: 1000
