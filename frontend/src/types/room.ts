@@ -9,6 +9,7 @@ export interface Room {
   id: number; roomNumber: string; floor: number; roomTypeId: number; notes: string
   enabled: boolean; cleaningStatus: CleaningStatus; version: number; createdAt: string; updatedAt: string
   roomTypeName: string; roomTypeCode: string; roomTypeEnabled: boolean; occupied: boolean
+  hasOpenIssue: boolean; hasCriticalIssue: boolean; hasManualMaintenanceStop: boolean;
   hasBlockingIssue: boolean; hasOpenCleaningTask: boolean; hasUsageHistory: boolean
   occupancyStatus: 'VACANT' | 'OCCUPIED'; maintenanceStatus: 'NORMAL' | 'OUT_OF_SERVICE'
   enabledStatus: 'ENABLED' | 'DISABLED'; canCheckIn: boolean; availability: Availability

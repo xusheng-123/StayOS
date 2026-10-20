@@ -41,6 +41,7 @@ async function leave() {
         <router-link to="/stays/history" :class="['nav-link', { active: route.path === '/stays/history' }]"><span class="nav-number">11</span>历史入住<span class="nav-arrow">›</span></router-link>
       </nav></template>
       <template v-if="can('housekeeping:read')"><p class="nav-caption room-nav-caption">客房功能</p><nav aria-label="客房功能"><router-link to="/housekeeping/tasks" :class="['nav-link', { active: route.path === '/housekeeping/tasks' }]"><span class="nav-number">12</span>清洁任务<span class="nav-arrow">›</span></router-link><router-link v-if="can('housekeeping:manage')" to="/housekeeping/assignment" :class="['nav-link', { active: route.path === '/housekeeping/assignment' }]"><span class="nav-number">13</span>人员分房<span class="nav-arrow">›</span></router-link></nav></template>
+      <nav v-if="can('issue:report')" aria-label="异常功能"><router-link to="/room-issues" :class="['nav-link', { active: route.path === '/room-issues' }]"><span class="nav-number">14</span>房间异常<span class="nav-arrow">›</span></router-link></nav>
       <div class="sidebar-bottom"><span class="status-dot"></span> StayOS V1.0</div>
     </aside>
     <div class="workspace-body">

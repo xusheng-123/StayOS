@@ -45,6 +45,8 @@ public class ApiErrors {
     ResponseEntity<?> missing(Exception ignored) {
         return ResponseEntity.status(404).body(ApiResponse.error("NOT_FOUND", "请求的接口不存在"));
     }
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<?> method(Exception ignored) { return ResponseEntity.status(405).body(ApiResponse.error("METHOD_NOT_ALLOWED","此接口不支持该操作")); }
     @ExceptionHandler(Exception.class)
     ResponseEntity<?> unexpected(Exception ignored) { recordFailure(); return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "操作失败，请稍后重试")); }
 }

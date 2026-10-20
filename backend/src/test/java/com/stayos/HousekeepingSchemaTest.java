@@ -45,7 +45,7 @@ class HousekeepingSchemaTest {
                 long task=db.queryForObject("insert into housekeeping_tasks(room_id,task_type,source,source_id,stay_record_id,room_segment_id,created_by) values(?,'CHECKOUT_CLEANING','CHECKOUT',?,?,?,?) returning id",Long.class,room,stay,stay,segment,actor);
                 db.update("insert into idempotency_requests(operator_id,operation,request_key,request_hash,result_stay_id) values(?,'CHECK_OUT',gen_random_uuid(),repeat('a',64),?)",actor,stay);
                 var before=db.queryForMap("select * from housekeeping_tasks where id=?",task);
-                var upgrade=Flyway.configure().dataSource(datasource).schemas(schema).defaultSchema(schema).load();assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(2);upgrade.validate();
+                var upgrade=Flyway.configure().dataSource(datasource).schemas(schema).defaultSchema(schema).load();assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(3);upgrade.validate();
                 assertThat(db.queryForMap("select * from housekeeping_tasks where id=?",task)).containsAllEntriesOf(before);
                 assertThat(db.queryForMap("select action,to_status,operator_id,task_version from housekeeping_task_logs where task_id=?",task)).containsEntry("action","AUTO_CREATE").containsEntry("to_status","PENDING").containsEntry("operator_id",actor).containsEntry("task_version",0L);
                 assertThat(db.queryForObject("select l.operated_at=t.created_at from housekeeping_task_logs l join housekeeping_tasks t on t.id=l.task_id",Boolean.class)).isTrue();

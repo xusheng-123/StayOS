@@ -9,6 +9,7 @@ const router = createRouter({
     { path: '/', component: () => import('../layouts/WorkspaceLayout.vue'), children: [
       { path: '', component: () => import('../views/WorkspaceView.vue') },
       ...workspaces.map(item => ({ path: `workspaces/${item.key}`, component: () => import('../views/WorkspaceView.vue'), meta: { permission: item.permission, workspace: item.key } })),
+      { path: 'room-issues', component: () => import('../views/RoomIssuesView.vue'), meta: { permission: 'issue:report' } },
       { path: 'rooms', component: () => import('../views/RoomBoardView.vue'), meta: { permission: 'room:read' } },
       { path: 'stays/new', component: () => import('../views/CheckInView.vue'), meta: { permission: 'stay:manage' } },
       { path: 'stays/history', component: () => import('../views/StayListView.vue'), meta: { permission: 'stay:manage' } },

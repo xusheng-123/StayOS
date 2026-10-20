@@ -7,6 +7,7 @@ public class RoomView extends Room {
     public String roomTypeCode;
     public Boolean roomTypeEnabled;
     public Boolean occupied;
+    public Boolean hasOpenIssue,hasCriticalIssue,hasManualMaintenanceStop;
     public Boolean hasBlockingIssue;
     public Boolean hasOpenCleaningTask;
     public Boolean hasUsageHistory;

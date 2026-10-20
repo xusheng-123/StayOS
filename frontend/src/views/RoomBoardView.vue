@@ -53,7 +53,7 @@ onMounted(refresh)
           <div class="room-card-top"><span class="room-floor">{{ floorName(room.floor) }}</span><span class="room-card-arrow">↗</span></div>
           <strong class="room-number">{{ room.roomNumber }}</strong><span class="room-type-name">{{ room.roomTypeName }}</span>
           <span class="room-status-pill">{{ availabilityNames[room.availability] }}</span>
-          <span class="room-card-flags">{{ room.occupied ? '已入住' : '空闲' }} · {{ cleaningNames[room.cleaningStatus] }}<template v-if="room.hasBlockingIssue"> · 有阻止异常</template><template v-if="!room.enabled"> · 档案停用</template></span>
+          <span class="room-card-flags">{{ room.occupied ? '已入住' : '空闲' }} · {{ cleaningNames[room.cleaningStatus] }}<template v-if="room.hasBlockingIssue"> · 维修停用</template><template v-if="room.hasCriticalIssue"> · 严重异常</template><template v-if="room.hasOpenIssue && !room.hasCriticalIssue"> · 有待处理异常</template><template v-if="!room.enabled"> · 档案停用</template></span>
         </button>
       </div>
       <el-empty v-else-if="!loading && !error" :description="types.length ? '没有符合条件的房间' : '暂无房间，请管理员先维护房型和房间'" />

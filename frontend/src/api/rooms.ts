@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { RoomType, RoomFilters, PageResult, Floor, Availability, CleaningStatus } from '../types/room'
+import type { RoomType, RoomFilters, PageResult, Floor, Availability, CleaningStatus, Room } from '../types/room'
 
 export const availabilityNames: Record<Availability, string> = {
   VACANT_CLEAN: '空闲可入住', OCCUPIED: '已入住', DIRTY: '待打扫', CLEANING: '正在打扫',
@@ -28,4 +28,15 @@ export async function roomOptions(): Promise<{ types: RoomType[]; floors: Floor[
 }
 export function localTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+}
+
+export function blockedReasons(room: Room): string[] {
+  const reasons: string[] = []
+  if (!room.enabled) reasons.push('房间档案停用')
+  if (room.occupied) reasons.push('当前已有住客占用')
+  if (room.cleaningStatus !== 'CLEAN') reasons.push('尚未完成必要清洁')
+  if (room.hasOpenCleaningTask) reasons.push('存在未完成清洁任务')
+  if (room.hasCriticalIssue) reasons.push('存在未解决严重异常')
+  if (room.hasManualMaintenanceStop) reasons.push('存在有效人工维修停用')
+  return reasons
 }

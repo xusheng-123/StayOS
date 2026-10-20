@@ -106,7 +106,7 @@
 
 建议对 `room_number` 设置唯一性限制。若系统以后支持多家酒店，应考虑加入 `hotel_id`，并使用“酒店 ID + 房号”的组合唯一约束。
 
-占用以未结束的 `stay_room_segments` 为准；清洁以 `cleaning_status` 为准；维修阻止来自未解决且 `blocks_check_in=true` 的 `room_issues`，不再用一个可任意修改的综合房态字段保存所有事实。
+占用以未结束的 `stay_room_segments` 为准；清洁以 `cleaning_status` 为准；维修阻止来自未解决 CRITICAL 的 `room_issues` 或有效 `room_maintenance_stops`，不再用一个可任意修改的综合房态字段保存所有事实。
 
 可入住条件为：房间档案启用、无当前占用、清洁合格、无入住阻止、无未完成清洁任务。后端统一判断，接口返回综合展示状态与各维度。主要展示状态优先级见 PRD 第 5.1 节。新建房间默认 `DIRTY`，人工创建并完成任务后才能入住。
 
@@ -163,7 +163,7 @@
 
 每次换房新增一条记录，两段必须属于同一次入住且房间不同；原段已结束，新段从换房时间开始。对 `from_segment_id`、`to_segment_id` 各设置唯一约束，避免同一段重复换出或重复换入。请求携带原段 ID，若已不是当前段则拒绝，避免旧页面重复换房。
 
-`reason_type` 为 `NORMAL` 或 `BLOCKING_ISSUE`。普通换房的 `blocking_issue_id` 为空；因影响入住的异常换房必须关联 `room_issues.id`，办理时在事务中锁定并核对：异常属于原房、状态 `OPEN` 且 `blocks_check_in=true`。本地检查约束保证类别与空值关系，跨表含义由业务事务保证。
+`reason_type` 为 `NORMAL` 或 `BLOCKING_ISSUE`。普通换房的 `blocking_issue_id` 为空；因影响入住的异常换房必须关联 `room_issues.id`，办理时在事务中锁定并核对：异常属于原房、状态非 `RESOLVED` 且严重程度为 `CRITICAL`（第 7 阶段换房实现时再核对其余关联规则）。本地检查约束保证类别与空值关系，跨表含义由业务事务保证。
 
 异常先通过上报接口保存，不能只把故障写进 `reason`。换房失败不删除已上报异常，原房清洁完成也不解除异常。关联的异常后来解决时保留换房历史引用，不级联删除。
 
@@ -186,15 +186,15 @@
 
 共用幂等表新增 `result_task_log_id` 外键及六个 HK 操作类型，结果类型检查防止入住结果与任务结果混用。原入住/退房结果及 24 小时协议保持不变。
 
-### 4.11 `room_issues`：房间异常
+### 4.11 房间异常与人工维修停用（V11 已实现）
 
-建议字段：`id`、`room_id`、`issue_type`、`description`、`blocks_check_in`、`status`、`reported_by`、`reported_at`、`resolved_by`、`resolved_at`、`resolution_notes`。时间字段使用 `TIMESTAMPTZ`；状态仅为 `OPEN → RESOLVED`。
+详见 [ROOM-ISSUES.md](ROOM-ISSUES.md)。room_issues 保存房间、类型、严重程度、OPEN/IN_PROGRESS/RESOLVED、上报/开始/解决人员时间、结论和版本；room_issue_logs 保留每次动作的前后状态与程度及原始上报事实。
 
-前台、服务员、主管、总经理可上报，后端验证异常类型及是否阻止入住，保存后普通上报者不能直接移除阻止。仅主管和总经理可填写处理说明、确认解决。第一版不设维修工单和维修人员派单。
+room_maintenance_stops 保存独立人工停用及恢复周期；room_maintenance_logs 保存唯一的 STOP/RESUME 回执供历史及幂等结果关联。有效人工停用以 resumed_at 为空识别，同房部分唯一索引防重复。可选关联异常用同房复合外键，不能关联其他房间。
 
-固定类型及阻止规则以 PRD 第 4.5 节为准：`EQUIPMENT_FAILURE`（影响入住的设备故障）、`HYGIENE_ISSUE`（严重卫生问题）强制 `blocks_check_in=true`；`LOST_PROPERTY`、`OTHER` 默认 false，可上报为 true。后端拒绝未知类型和强制阻止类型传 false；数据库用类型白名单及必要检查约束防止强制类型存 false，不建立动态规则表或配置页面。
+room_operational_facts 把未解决 CRITICAL 或有效人工停用归为 has_blocking_issue，沿用既有字段语义表示维修阻止；room_status 追加 has_open_issue / has_critical_issue / has_manual_maintenance_stop，所有可入住判断共用派生事实。清洁状态仍只在 rooms 保存，不增加可写维修状态副本。
 
-仅 `OPEN` 且 `blocks_check_in=true` 的记录阻止新入住和换入；每次解除后重新检查其余异常和清洁条件。已入住的房间上报异常不自动退房；清洁完成不解决异常，异常解决不自动变更清洁状态。备注及遗留物品信息按岗位限制查看。
+idempotency_requests 新增两种日志结果外键和操作白名单，原有入住、退房、清洁和批量分房结果保持兼容。V1–V10 不改，V11 无清空或覆盖现有数据操作。
 
 ### 4.12 `audit_logs`：关键操作日志
 

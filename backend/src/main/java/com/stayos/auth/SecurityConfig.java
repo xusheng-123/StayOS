@@ -39,6 +39,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/health", "/api/auth/csrf", "/api/auth/login").permitAll()
                 .requestMatchers("/api/auth/me", "/api/auth/status", "/api/auth/logout", "/api/workspaces/**", "/api/users/**", "/api/roles").authenticated()
                 .requestMatchers("/api/room-types", "/api/room-types/**", "/api/rooms", "/api/rooms/**", "/api/room-status", "/api/room-status/**", "/api/floors").authenticated()
+                 .requestMatchers("/api/room-issues", "/api/room-issues/**", "/api/room-operations/**").authenticated()
                 .requestMatchers("/api/stays", "/api/stays/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())

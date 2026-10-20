@@ -13,9 +13,9 @@ public interface StayMapper {
         on conflict(operator_id,operation,request_key) do nothing
         """)
     int reserve(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("hash") String hash);
-    class RequestResult { public String requestHash; public Long resultStayId,resultTaskLogId,resultAssignmentBatchId; public Boolean expired; }
+    class RequestResult { public String requestHash; public Long resultStayId,resultTaskLogId,resultAssignmentBatchId,resultIssueLogId,resultMaintenanceLogId; public Boolean expired; }
     @Select("""
-        select request_hash,result_stay_id,result_task_log_id,result_assignment_batch_id,expires_at <= clock_timestamp() expired
+        select request_hash,result_stay_id,result_task_log_id,result_assignment_batch_id,result_issue_log_id,result_maintenance_log_id,expires_at <= clock_timestamp() expired
         from idempotency_requests where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)
         """)
     RequestResult request(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key);
@@ -25,6 +25,10 @@ public interface StayMapper {
     int completeTask(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("log") long log);
     @Update("update idempotency_requests set result_assignment_batch_id=#{batch} where operator_id=#{actor} and operation='HK_BATCH_ASSIGN' and request_key=CAST(#{key} AS uuid)")
     int completeBatch(@Param("actor") long actor,@Param("key") String key,@Param("batch") long batch);
+    @Update("update idempotency_requests set result_issue_log_id=#{log} where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)")
+    int completeIssue(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("log") long log);
+    @Update("update idempotency_requests set result_maintenance_log_id=#{log} where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)")
+    int completeMaintenance(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("log") long log);
     @Insert("""
         insert into stay_records(check_in_at,expected_check_out_at,created_by,notes)
         values(#{checkInAt},#{expectedCheckOutAt},#{actor},#{notes})
