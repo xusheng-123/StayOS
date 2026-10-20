@@ -48,6 +48,7 @@ class CheckoutIntegrationTest {
             jdbc.execute("drop function if exists test_fail_checkout_"+target+"_fn()");
         }
         var guests=jdbc.queryForList("select guest_id from stay_guests where stay_record_id in(select id from stay_records where created_by in(select id from users where username like 'checkout_test_%'))",Long.class);
+        jdbc.update("delete from housekeeping_task_logs where task_id in(select id from housekeeping_tasks where created_by in(select id from users where username like 'checkout_test_%'))");
         jdbc.update("delete from housekeeping_tasks where created_by in(select id from users where username like 'checkout_test_%')");
         jdbc.update("delete from idempotency_requests where operator_id in(select id from users where username like 'checkout_test_%')");
         jdbc.update("delete from stay_guests where stay_record_id in(select id from stay_records where created_by in(select id from users where username like 'checkout_test_%'))");
@@ -213,17 +214,19 @@ class CheckoutIntegrationTest {
         for(String role:ids.keySet()) {
             var b=login(role);boolean allowed=List.of("HOTEL_MANAGER","HOUSEKEEPING_MANAGER","HOUSEKEEPING_STAFF").contains(role);
             assertThat(b.get("/api/housekeeping-tasks").statusCode()).as(role).isEqualTo(allowed?200:403);
-            var detail=b.get("/api/housekeeping-tasks/"+result.taskId);assertThat(detail.statusCode()).isEqualTo(allowed?200:403);
-            if(allowed) {
+            boolean manages=List.of("HOTEL_MANAGER","HOUSEKEEPING_MANAGER").contains(role);
+            var detail=b.get("/api/housekeeping-tasks/"+result.taskId);assertThat(detail.statusCode()).isEqualTo(manages?200:allowed?404:403);
+            if(role.equals("HOUSEKEEPING_STAFF")) assertThat(data(b.get("/api/housekeeping-tasks?scope=ALL")).path("total").asInt()).isZero();
+            if(manages) {
                 assertThat(detail.body()).doesNotContain("虚构退房住客","S4-FICTIONAL-001","000-000-0000","document","phone","ciphertext","primaryGuest");
                 assertThat(data(b.get("/api/housekeeping-tasks?floor=4&status=PENDING&roomNumber="+result.roomNumber)).path("total").asInt()).isEqualTo(1);
                 assertThat(data(b.get("/api/housekeeping-tasks?floor=5")).path("total").asInt()).isZero();
-                assertThat(b.request("POST","/api/housekeeping-tasks/"+result.taskId+"/start",Map.of(),null).statusCode()).isEqualTo(404);
+                assertThat(b.request("POST","/api/housekeeping-tasks/"+result.taskId+"/start",Map.of(),null).statusCode()).isEqualTo(400);
             }
         }
         assertThat(new Browser().get("/api/housekeeping-tasks").statusCode()).isEqualTo(401);
         var hk=login("HOUSEKEEPING_STAFF");
-        for(String q:List.of("page=0","pageSize=101","floor=0","floor=bad","status=COMPLETED")) assertThat(hk.get("/api/housekeeping-tasks?"+q).statusCode()).isEqualTo(400);
+        for(String q:List.of("page=0","pageSize=101","floor=0","floor=bad","status=INVALID")) assertThat(hk.get("/api/housekeeping-tasks?"+q).statusCode()).isEqualTo(400);
         assertThat(hk.get("/api/housekeeping-tasks/999999999").statusCode()).isEqualTo(404);
     }
     @Test void idempotencyResultFailureAlsoRollsBackRoomStayTaskAndAudit() throws Exception {

@@ -31,7 +31,7 @@ for (const role of ['ADMIN', 'HOTEL_MANAGER', 'FRONT_DESK', 'HOUSEKEEPING_MANAGE
     const tasks = ['HOTEL_MANAGER', 'HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'].includes(role)
     await expect(page.getByRole('navigation', { name: '客房功能', exact: true })).toHaveCount(tasks ? 1 : 0)
     await page.goto('/housekeeping/tasks')
-    if (tasks) await expect(page.getByRole('heading', { name: '待处理清洁任务', exact: true })).toBeVisible()
+    if (tasks) await expect(page.getByRole('heading', { name: '清洁任务工作台', exact: true })).toBeVisible()
     else await expect(page.getByText('无权访问此工作区', { exact: true })).toBeVisible()
     await page.goto('/stays')
     if (['FRONT_DESK', 'HOTEL_MANAGER'].includes(role)) await expect(page.getByRole('heading', { name: '当前入住', exact: true })).toBeVisible()
@@ -94,8 +94,8 @@ test('刷新后恢复原退房请求，浏览器不保存住客资料', async ({
   expect((await response).headers()['idempotency-key']).toBe(originalKey)
   await expect(page.getByText('退房成功，清洁任务创建成功', { exact: true })).toBeVisible()
 })
-test('客房服务员筛选和查看任务详情，没有住客资料与处理按钮', async ({ page }) => {
-  await login(page, 'HOUSEKEEPING_STAFF'); await page.goto('/housekeeping/tasks')
+test('客房主管筛选和查看未分配退房任务，没有住客资料与越流程处理按钮', async ({ page }) => {
+  await login(page, 'HOUSEKEEPING_MANAGER'); await page.goto('/housekeeping/tasks')
   await page.getByLabel('任务房号搜索', { exact: true }).fill(fixtures.task!.number)
   await page.getByRole('combobox', { name: '任务楼层', exact: true }).click()
   await page.getByRole('listbox').getByRole('option', { name: '4 楼', exact: true }).click()

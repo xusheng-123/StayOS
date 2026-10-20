@@ -167,41 +167,24 @@
 
 异常先通过上报接口保存，不能只把故障写进 `reason`。换房失败不删除已上报异常，原房清洁完成也不解除异常。关联的异常后来解决时保留换房历史引用，不级联删除。
 
-### 4.9 `housekeeping_tasks`：清洁任务
+### 4.9 `housekeeping_tasks`：清洁任务（第 5 阶段实际结构）
 
-> 本节字段为完整清洁流程草案。第 4 阶段实际只实现退房自动任务和查询，实际列名/约束见本文末的第 4 阶段补充及 CHECK-OUT.md；未建立执行人、分配、完成、验收或任务日志表。
+原 V7/V8 表增量扩展为退房和人工任务。实际字段及约束见 [HOUSEKEEPING.md](HOUSEKEEPING.md) 与 `V9__housekeeping_workflow.sql`。
 
-| 字段 | 建议类型 | 用途 |
-|---|---|---|
-| `id` | BIGINT | 任务内部编号 |
-| `task_number` | VARCHAR(40) | 员工可读的任务编号，可唯一 |
-| `room_id` | BIGINT | 关联房间 |
-| `source_type` | VARCHAR(30) | `CHECK_OUT`、`ROOM_CHANGE`、`MANUAL` |
-| `source_segment_id` | BIGINT | 来源房间使用记录；自动任务必填，人工任务为空 |
-| `status` | VARCHAR(30) | 固定为 `PENDING`、`IN_PROGRESS`、`COMPLETED` |
-| `priority` | VARCHAR(20) | 普通/高优先级等 |
-| `assigned_to` | BIGINT | 负责员工，可为空 |
-| `created_by` | BIGINT | 人工创建者或触发自动任务的员工，外键指向真实员工 |
-| `created_at` | TIMESTAMPTZ | 任务创建时间 |
-| `started_at` | TIMESTAMPTZ | 开始时间 |
-| `completed_at` | TIMESTAMPTZ | 完成时间 |
-| `notes` | TEXT | 必要备注，不应写入不必要的敏感个人信息 |
+- 来源 `CHECKOUT` 配 `CHECKOUT_CLEANING`，`source_id=stay_record_id`，三项来源关联必填；保留 `room_segment_id/stay_record_id/room_id` 复合外键，不能关联无关房间或入住。
+- 来源 `MANUAL` 配 `MANUAL_CLEANING`，`source_id/stay_record_id/room_segment_id` 必须全部为空，真实房间/创建人及非空 `notes` 原因必填。
+- 状态 `PENDING/IN_PROGRESS/COMPLETED`；未完成房间部分唯一索引同时覆盖前两种状态，完成历史允许保留并再次建任务。
+- `assigned_to/assigned_by/assigned_at/claimed_at` 保存当前归属；`started_by/started_at` 保存最初开始事实；`completed_by/completed_at/completion_notes` 保存最终完成事实，`version` 防止旧页面覆盖。
+- 自主领取已关闭，claimed_at 与历史 CLAIM 仅兼容既有数据。主管分配后仍 PENDING，开始才 CLEANING；清洁中重新分配必须带原因，保留原开始时间/人员并记录交接。完成仅当前负责人，时间和人员组合由数据库检查约束保护。
+- 人工任务必须空闲、DIRTY、无未完成任务；不直接把 CLEAN/INSPECTION/占用房间改脏。清洁流程不解除异常或修改占用/启用。
 
-状态固定为 `PENDING → IN_PROGRESS → COMPLETED`，第一版没有验收、退回、住中清洁及普通清洁中改派。`assigned_to` 在未分配时为空；领取并开始时原子确定执行人，已分配任务仅执行人能开始，完成也仅当前执行人操作。主管和总经理可被分配给自己执行任务，但不能绕过归属直接完成其他执行人的任务。
+### 4.10 `housekeeping_task_logs`：清洁任务历史（第 5 阶段已实现）
 
-主管和总经理只可分配或改派 `PENDING` 任务，目标必须是启用且有清洁执行权限的员工。人工创建只允许无人入住且无未完成任务的房间；用于初次清洁或重新清洁，来源为 `MANUAL`。
+字段：`id/task_id/action/from_status/to_status/from_assignee/to_assignee/operator_id/operated_at/reason/task_version`。动作 `AUTO_CREATE/MANUAL_CREATE/CLAIM/ASSIGN/REASSIGN/START/COMPLETE`；`REASSIGN` 同时记录待处理改派和清洁中接管，清洁中接管的前后状态均为 IN_PROGRESS，原因必填。
 
-仅当原执行人账号禁用、失去执行权限，或主管/总经理确认因其他原因无法继续时，允许通过独立的受控接管动作处理 `IN_PROGRESS` 任务。只有主管或总经理可操作，必须提供原因并核对预期原执行人，新执行人必须不同且启用、有清洁执行权限。接管只改变 `assigned_to`；保留 `started_at`，任务仍为 `IN_PROGRESS`，房间仍为 `CLEANING`，不创建替代任务、不直接完成。任务交接日志和成功审计与执行人变更在同一事务保存；原执行人之后无权完成，接管与完成使用同一锁定顺序及归属检查。
+`(task_id,task_version)` 唯一，创建为版本 0，以后每个合法动作递增并追加日志；无普通修改/删除历史接口。旧退房任务按真实创建人/时间补记 AUTO_CREATE。任务、房间状态、历史、成功审计、请求结果均在同一事务中保存。
 
-对非空 `source_segment_id` 设置唯一约束，防止同一段离房重复建任务；对 `room_id` 设置 `status IN ('PENDING','IN_PROGRESS')` 条件的部分唯一索引，防止同房间同时存在多个未完成任务。自动任务的房间及来源类型必须与已结束的来源段一致，人工任务不得伪造来源段。
-
-创建任务同时设房间 `DIRTY`，开始设 `CLEANING`，完成设 `CLEAN`，并写任务日志；各动作在同一事务中完成。完成前验证它仍是当前未完成任务，且无人入住，防止旧任务覆盖新状态；综合可入住性另行判断，不解除异常。
-
-### 4.10 `housekeeping_task_logs`：清洁任务历史
-
-建议字段：`id`、`task_id`、`action`、`from_status`、`to_status`、`from_assigned_to`、`to_assigned_to`、`operator_id`、`created_at`、`note`。
-
-作用：记录任务创建、分配、改派、领取并开始、受控接管和完成，方便追溯；分配、改派及接管保存 `from_assigned_to`、`to_assigned_to`。接管动作使用 `TAKEOVER`，`note` 必填并保存无法继续的原因，`from_status` 和 `to_status` 都为 `IN_PROGRESS`；`operator_id` 为实际操作的主管或总经理。`created_at` 使用 `TIMESTAMPTZ`，任务日志与任务变化同事务保存。第一版没有验收退回记录。
+共用幂等表新增 `result_task_log_id` 外键及六个 HK 操作类型，结果类型检查防止入住结果与任务结果混用。原入住/退房结果及 24 小时协议保持不变。
 
 ### 4.11 `room_issues`：房间异常
 
@@ -250,7 +233,7 @@
 10. 使用外键和必要检查约束验证状态、来源空值、时间先后；跨表关联含义由业务事务检查。不能只靠数据库唯一约束代替业务规则。
 11. 入住、退房、换房、任务和异常操作使用统一锁定顺序：需要时先锁入住记录，再按房间 ID 升序锁相关房间，再处理关联记录。异常上报/解决和清洁操作也锁相关房间，保证与分房互斥。
 12. 换房在一个事务内完成关闭原段、创建新段、写换房历史、原房标脏、创建清洁任务和审计；退房与换房针对同一次入住不能同时成功。
-13. 并发领取使用状态与执行人条件更新或行锁，只能一人成功；任务、清洁状态和任务日志同事务变化。接管需验证当前执行人未变，并与完成串行处理；若任务已完成则拒绝接管，若先接管则旧执行人完成请求被拒绝。
+13. 并发分房使用房间行锁、任务状态/版本和执行人校验，只能一个批次成功；任务、清洁状态和任务日志同事务变化。接管需验证当前执行人未变，并与完成串行处理；若任务已完成则拒绝接管，若先接管则旧执行人完成请求被拒绝。
 14. 重复请求与业务状态检查共同防重。入住使用独立 idempotency_requests 表，保存请求标识、带密钥内容摘要和成功入住 ID；同内容 24 小时内返回原结果，过期旧标识拒绝且不自动清理，失败随业务回滚。已获第 3 阶段确认，详见 CHECK-IN.md；不使用普通审计日志代替。
 
 【注释】行锁相当于让冲突操作排队；事务保证不成功一半；唯一约束防止重复数据。三者用途不同，需要配合。
@@ -265,7 +248,7 @@
 
 ## 8. 已确定规则与待确认边界
 
-清洁不验收、领取加手动分配、受控接管、故障换房关联阻止异常、固定异常类型规则、房间使用分段、异常解决权限和收费分期均已确定，见 PRD，不再反复确认。第一版不按预计退房时间自动创建任务或自动调整优先级。
+清洁不验收、仅主管/总经理手动或批量分房、受控接管、故障换房关联阻止异常、固定异常类型规则、房间使用分段、异常解决权限和收费分期均已确定，见 PRD，不再反复确认。第一版不按预计退房时间自动创建任务或自动调整优先级。
 
 2026-10-20 已确认单酒店、房号全局唯一、无楼栋、非零整数楼层（地下层为负数）；无使用历史可改房号，已有历史禁止直接改号。首个管理员采用一次性终端初始化。第 3 阶段又确认全部实际住客、证件与电话加密及入住幂等策略，见 CHECK-IN.md；真实试用的数据保留期限、身份核验等仍按 PRD 第 9 节暂停确认。房间实际迁移与视图规则见 ROOMS.md，房型和房间均有防覆盖版本号。同住人通过独立关联表登记，不复制入住记录占用同一房间。
 
@@ -345,7 +328,7 @@
 【注释】应收与实收分开保存；押金、分次收款、退款及是否只允许全额结算等规则均在第二阶段确认，第一版不保存收款结果。
 
 
-## 第 4 阶段实际数据库补充
+## 第 4 阶段实际数据库补充（当时快照，第 5 阶段扩展见 4.9/4.10）
 
 新增 `V7__checkout_housekeeping.sql` 和 `V8__one_open_cleaning_task_per_room.sql`；V1—V6 保持原文件。V8 是 V7 已在隔离测试库执行后继续增加的约束，没有回写已执行迁移。
 
@@ -357,3 +340,9 @@
 - 所有本阶段任务均未分配，属于客房部可读的未分配任务池，不含住客资料。第 5 阶段新增任务状态时需增量扩展状态约束、未完成索引和房态视图，保持三者一致。
 
 详细设计和验收证据见 [CHECK-OUT.md](CHECK-OUT.md)、[PHASE4-DELIVERY.md](PHASE4-DELIVERY.md)。
+
+## 第五阶段批量分房增量 V10
+
+新增 housekeeping_assignment_batches（操作人、目标员工、服务器时间、必要备注）及 housekeeping_assignment_items（批次、房间、任务、房号快照、可选创建日志及必填分配日志）。条目通过复合外键验证房间/任务、日志/任务对应关系，批次内房间/任务唯一，分配日志唯一。原任务仍是唯一清洁业务模型。
+
+idempotency_requests 新增 result_assignment_batch_id，与原 result_stay_id/result_task_log_id 按操作类型互斥；新增 HK_BATCH_ASSIGN。HK_CLAIM 仅为历史兼容保留，服务和 HTTP 均拒绝新领取。V1—V9 不修改，不清空或覆盖业务资料。批次字段不包含住客资料或完整请求正文。参见 HOUSEKEEPING.md 批量优化规则。

@@ -24,7 +24,7 @@ watch(() => route.meta.workspace, load, { immediate: true })
   <section v-loading="loading">
     <div class="page-heading"><div><p class="eyebrow muted">YOUR WORKSPACE</p><h1>{{ current?.title }}</h1><p class="subtle">{{ current?.description }}</p></div><el-tag v-if="verified" type="success" effect="light" round disable-transitions>访问权限已验证</el-tag></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon /><el-button v-if="error" @click="load" class="retry-button">重试</el-button>
-    <div v-if="verified" class="welcome-card"><div class="welcome-symbol">S</div><div><h2>工作台已就绪</h2><p>你已成功进入当前角色的工作区域。</p><p class="subtle">通过“房态图”查看酒店房间；入住、退房与清洁任务将在后续阶段开放。</p><router-link to="/rooms" class="card-link">查看房态图 →</router-link></div></div>
+    <div v-if="verified" class="welcome-card"><div class="welcome-symbol">S</div><div><h2>工作台已就绪</h2><p>你已成功进入当前角色的工作区域。</p><p class="subtle">通过“房态图”查看酒店房间；前台可办理入住和退房，客房部可通过清洁任务更新房态。</p><router-link to="/rooms" class="card-link">查看房态图 →</router-link></div></div>
     <section v-if="verified && links.length" class="quick-section"><h2>其他可用工作区域</h2><div class="workspace-grid"><router-link v-for="item in links" :key="item.key" :to="`/workspaces/${item.key}`" class="workspace-card"><span class="card-number">{{ item.number }}</span><h3>{{ item.title }}</h3><p>{{ item.description }}</p><span class="card-link">进入工作区 →</span></router-link></div></section>
   </section>
 </template>

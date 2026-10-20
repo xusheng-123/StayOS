@@ -34,6 +34,7 @@ public class ApiErrors {
         if (detail != null && detail.contains("uq_room_number")) { code="ROOM_NUMBER_EXISTS"; message="房号已存在，请使用其他房号"; }
         else if (detail != null && detail.contains("uq_room_type_code")) { code="ROOM_TYPE_CODE_EXISTS"; message="房型编码已存在，请使用其他编码"; }
         else if (detail != null && detail.contains("uq_room_active_segment")) { code="ROOM_NOT_AVAILABLE"; message="房间已被其他操作占用，请刷新后重试"; }
+        else if (detail != null && detail.contains("uq_room_open_cleaning_task")) { code="TASK_ALREADY_EXISTS"; message="该房间已有未完成的清洁任务，请查看原任务"; }
         return ResponseEntity.status(409).body(ApiResponse.error(code,message));
     }
     // Let Spring Security's filter handler audit access denial and return the common JSON format.
