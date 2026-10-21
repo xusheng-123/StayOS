@@ -12,6 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 // Created inside the SecurityFilterChain only, so it cannot also run as a servlet filter.
 public class CurrentAccountFilter extends OncePerRequestFilter {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CurrentAccountFilter.class);
     private final UserMapper users;
     private final IpLoginLimiter limiter;
     private final ObjectMapper json;
@@ -23,6 +24,7 @@ public class CurrentAccountFilter extends OncePerRequestFilter {
         }
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getPrincipal() instanceof SessionIdentity identity) {
+          try {
             var user = users.selectById(identity.userId());
             if (user == null || !user.enabled || user.securityVersion != identity.securityVersion()) {
                 var session = request.getSession(false);
@@ -33,6 +35,12 @@ public class CurrentAccountFilter extends OncePerRequestFilter {
                 fresh.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(identity, null, RolePermissions.authorities(users.roles(user.id))));
                 SecurityContextHolder.setContext(fresh);
             }
+          } catch (org.springframework.dao.DataAccessException unavailable) {
+              log.warn("Account verification database unavailable; returning SERVICE_UNAVAILABLE.");
+              response.setStatus(503); response.setContentType("application/json;charset=UTF-8");
+              json.writeValue(response.getOutputStream(), ApiResponse.error("SERVICE_UNAVAILABLE", "暂时无法验证账号状态，请保留原请求标识，服务恢复后重试或查询记录"));
+              return;
+          }
         }
         chain.doFilter(request, response);
     }

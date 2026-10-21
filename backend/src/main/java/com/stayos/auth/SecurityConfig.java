@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/room-types", "/api/room-types/**", "/api/rooms", "/api/rooms/**", "/api/room-status", "/api/room-status/**", "/api/floors").authenticated()
                  .requestMatchers("/api/room-issues", "/api/room-issues/**", "/api/room-operations/**").authenticated()
                 .requestMatchers("/api/stays", "/api/stays/**").authenticated()
+                .requestMatchers("/api/audit-logs", "/api/audit-logs/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors
@@ -48,7 +49,7 @@ public class SecurityConfig {
                 .accessDeniedHandler((request, response, e) -> {
                     var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
                     Long actor = auth != null && auth.getPrincipal() instanceof SessionIdentity identity ? identity.userId() : null;
-                    audit.denied(actor);
+                    try { audit.denied(actor); } catch (org.springframework.dao.DataAccessException | org.springframework.transaction.TransactionException ignored) { /* Failure reporting must not expose a database exception. Success audit remains fail-closed. */ }
                     if (e instanceof CsrfException) write(response, json, 403, "CSRF_INVALID", "页面安全校验已过期，请刷新后重试");
                     else write(response, json, 403, "FORBIDDEN", "你没有权限执行此操作");
                 }))

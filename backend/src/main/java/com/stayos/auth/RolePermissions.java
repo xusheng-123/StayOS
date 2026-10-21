@@ -9,7 +9,7 @@ public final class RolePermissions {
         "ADMIN", Set.of("room:read", "room:manage", "system:manage", "audit:management"),
         "FRONT_DESK", Set.of("room:read", "stay:manage", "issue:report"),
         "HOUSEKEEPING_STAFF", Set.of("room:read", "housekeeping:read", "housekeeping:execute", "issue:report"),
-        "HOUSEKEEPING_MANAGER", Set.of("room:read", "housekeeping:read", "housekeeping:execute", "housekeeping:manage", "issue:report", "issue:resolve"),
+        "HOUSEKEEPING_MANAGER", Set.of("room:read", "housekeeping:read", "housekeeping:execute", "housekeeping:manage", "issue:report", "issue:resolve", "audit:housekeeping"),
         "HOTEL_MANAGER", Set.of("room:read", "stay:manage", "housekeeping:read", "housekeeping:execute", "housekeeping:manage", "issue:report", "issue:resolve", "manager:workspace", "audit:business")
     );
     private RolePermissions() {}

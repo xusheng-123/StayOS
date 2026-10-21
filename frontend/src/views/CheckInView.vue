@@ -67,6 +67,9 @@ async function submit() {
   busy.value = true
   try {
     const stay = await api<Stay>('/api/stays', { method: 'POST', headers: { 'Idempotency-Key': pending.value.key }, body: JSON.stringify(pending.value.body) })
+    if (!stay || !Number.isSafeInteger(stay.id) || stay.id < 1 || !Number.isFinite(Date.parse(stay.checkInAt)) || !Array.isArray(stay.guests) || !stay.guests.length) {
+      throw new ApiError(0, 'INVALID_RESPONSE', '入住回执不完整，请保留原请求标识确认结果')
+    }
     forget(); guests.value = [{ ...phoneBlank(), primary: true }]; notes.value = ''; ElMessage.success('入住办理成功')
     await router.push(`/stays/${stay.id}`)
   } catch (cause) {

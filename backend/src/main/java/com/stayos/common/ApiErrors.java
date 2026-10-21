@@ -9,12 +9,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 @RestControllerAdvice
 public class ApiErrors {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ApiErrors.class);
     private final com.stayos.audit.AuditService audit;
     public ApiErrors(com.stayos.audit.AuditService audit) { this.audit = audit; }
     private void recordFailure() {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         Long actor = auth != null && auth.getPrincipal() instanceof com.stayos.auth.SessionIdentity identity ? identity.userId() : null;
-        audit.failure(actor, "REQUEST_FAILED", "API", null);
+        try { audit.failure(actor, "REQUEST_FAILED", "API", null); }
+        catch (org.springframework.dao.DataAccessException | org.springframework.transaction.TransactionException ignored) { log.warn("Failure audit unavailable; no database detail or request content is logged."); }
     }
     @ExceptionHandler(ApiException.class)
     ResponseEntity<?> business(ApiException e) {
@@ -36,6 +38,13 @@ public class ApiErrors {
         else if (detail != null && detail.contains("uq_room_active_segment")) { code="ROOM_NOT_AVAILABLE"; message="房间已被其他操作占用，请刷新后重试"; }
         else if (detail != null && detail.contains("uq_room_open_cleaning_task")) { code="TASK_ALREADY_EXISTS"; message="该房间已有未完成的清洁任务，请查看原任务"; }
         return ResponseEntity.status(409).body(ApiResponse.error(code,message));
+    }
+    @ExceptionHandler({org.springframework.dao.TransientDataAccessException.class,
+        org.springframework.dao.DataAccessResourceFailureException.class,
+        org.springframework.transaction.CannotCreateTransactionException.class})
+    ResponseEntity<?> unavailable(Exception ignored) {
+        recordFailure();
+        return ResponseEntity.status(503).body(ApiResponse.error("SERVICE_UNAVAILABLE", "服务暂时不可用，操作结果如未确认，请保留原请求标识，恢复后重试或查询记录"));
     }
     // Let Spring Security's filter handler audit access denial and return the common JSON format.
     @ExceptionHandler(AccessDeniedException.class)

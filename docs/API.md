@@ -6,7 +6,7 @@
 
 > **版本边界：** 第 4—10 节及第 11 节的管理/历史接口属于第一版。第 12 节为第二阶段收费参考，第一版不实现、不提供空接口或页面；退房不要求账单、支付信息或结算状态。第一版无主管验收、住中清洁、预订和续住接口。
 
-> **当前实现进度：** 第 1 阶段完成认证及账号/角色；第 2 阶段完成房间与房态，见 ROOMS.md；第 3 阶段入住、当前与历史入住查询见 CHECK-IN.md 和第 6 节。第 4 阶段退房见 CHECK-OUT.md；第 5 阶段清洁处理及人员批量分房见 HOUSEKEEPING.md 和根目录 PHASE5-BATCH-ASSIGNMENT-DELIVERY.md（PHASE5-DELIVERY 为优化前快照）；第 6 阶段异常及维修停用已实现，见 ROOM-ISSUES.md；第7阶段正式换房见ROOM-CHANGES.md和第8节。各阶段交付文档是当时的验收快照。
+> **当前实现进度：** 第 1 阶段完成认证及账号/角色；第 2 阶段完成房间与房态，见 ROOMS.md；第 3 阶段入住、当前与历史入住查询见 CHECK-IN.md 和第 6 节。第 4 阶段退房见 CHECK-OUT.md；第 5 阶段清洁处理及人员批量分房见 HOUSEKEEPING.md 和PHASE5-BATCH-ASSIGNMENT-DELIVERY.md（PHASE5-DELIVERY 为优化前快照）；第 6 阶段异常及维修停用已实现，见 ROOM-ISSUES.md；第7阶段正式换房见ROOM-CHANGES.md和第8节。各阶段交付文档是当时的验收快照。
 
 ## 1. 什么是接口？
 
@@ -385,3 +385,25 @@ reasonType 为 GUEST_REQUEST/ROOM_ISSUE/OTHER，说明必填；ROOM_ISSUE 的 is
 【注释】接口应当与具体页面一起逐步完成和测试。不要只创建许多空接口就认为功能已经开发完成。
 
 开发顺序的测试依赖：房间/入住阶段可用仅限开发与测试环境的虚构夹具准备清洁合格、待清洁和故障房。夹具是预先准备的数据，不是业务接口；不能为早期验收增加任意改房态或关闭异常的后门。清洁与异常功能完成后，必须用正常页面创建任务、完成清洁、上报和解决异常，再复验入住条件。其他未决事项按 PRD 第 9 节遇到即暂停等待用户反馈，不由此处的草案自动确认。
+
+## 第8阶段实际新增：集中操作审计（只读）
+
+继续使用原Session、CSRF和统一响应格式，不新增日志写入、删除或批量导出接口。
+
+| 接口 | 作用 |
+|---|---|
+| GET /api/audit-logs | 按当前岗位范围查询真实审计，数据库分页 |
+| GET /api/audit-logs/options | 返回当前账号可筛选的模块、动作及确实存在相应审计的操作人员 |
+| GET /api/audit-logs/{id} | 查询授权范围内单条事实，不在范围内返回404 |
+
+筛选：`page`默认1、`pageSize`默认20且最多100；`from`和`to`采用带时区的ISO时间，范围为 `[from,to)`，默认最近30天，每次最多366天；可选`operatorId`、`module`、`action`、`result`。结果按发生时间降序、ID降序排列。同一只读事务返回列表与总数。未知/越权模块或操作不能扩大后端范围。
+
+- ADMIN：SECURITY（登录、安全拒绝和通用请求失败）、ACCOUNT（账号管理）、CONFIGURATION（房间/房型配置）。
+- HOTEL_MANAGER：STAY、HOUSEKEEPING、ISSUE、MAINTENANCE、CONFIGURATION，不自动查看账号安全审计。
+- HOUSEKEEPING_MANAGER：HOUSEKEEPING、ISSUE、MAINTENANCE，通过`audit:housekeeping`授权。
+- FRONT_DESK、HOUSEKEEPING_STAFF：没有集中查询权限，保留原业务历史范围。
+- 多角色按授权范围合并，客户端不能传入角色或权限范围覆盖服务端判断。
+
+只返回事件ID、操作人员ID/当前姓名及账号、动作、业务对象类型/ID、结果和服务器时间，不返回正文、住客资料、凭据或密钥。旧审计没有记下的字段不补造；人员姓名是当前资料，不是历史姓名快照。自动清洁建单记录见原任务历史；批量分房按每条HK_ASSIGN事实展示，不伪造历史批次审计。历史HK_CLAIM允许在授权范围只读显示，所有角色自主领取接口仍拒绝。
+
+数据库暂不可用/查询超时可返回503 `SERVICE_UNAVAILABLE`。失败审计本身也不可写时仅输出不含SQL及请求内容的固定运维提示；业务成功所需的审计仍必须随事务成功，否则回滚。客户端保留不确定操作的原请求标识，不能把503误认为操作一定没有执行。

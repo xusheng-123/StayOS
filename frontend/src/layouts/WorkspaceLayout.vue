@@ -43,6 +43,7 @@ async function leave() {
       <template v-if="can('housekeeping:read')"><p class="nav-caption room-nav-caption">客房功能</p><nav aria-label="客房功能"><router-link to="/housekeeping/tasks" :class="['nav-link', { active: route.path === '/housekeeping/tasks' }]"><span class="nav-number">12</span>清洁任务<span class="nav-arrow">›</span></router-link><router-link v-if="can('housekeeping:manage')" to="/housekeeping/assignment" :class="['nav-link', { active: route.path === '/housekeeping/assignment' }]"><span class="nav-number">13</span>人员分房<span class="nav-arrow">›</span></router-link></nav></template>
       <nav v-if="can('issue:report')" aria-label="异常功能"><router-link to="/room-issues" :class="['nav-link', { active: route.path === '/room-issues' }]"><span class="nav-number">14</span>房间异常<span class="nav-arrow">›</span></router-link></nav>
       <div class="sidebar-bottom"><span class="status-dot"></span> StayOS V1.0</div>
+      <nav v-if="can('audit:management') || can('audit:business') || can('audit:housekeeping')" aria-label="操作记录"><router-link to="/audit-logs" :class="['nav-link', { active: route.path === '/audit-logs' }]"><span class="nav-number">15</span>操作记录<span class="nav-arrow">›</span></router-link></nav>
     </aside>
     <div class="workspace-body">
       <header class="topbar"><span class="topbar-label">员工工作台</span><div class="user-actions"><span class="user-avatar">{{ auth.user?.displayName.slice(0, 1) }}</span><span class="user-name">{{ auth.user?.displayName }}</span><el-button text :loading="busy" @click="leave">退出登录</el-button></div></header>

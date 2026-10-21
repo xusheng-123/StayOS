@@ -11,6 +11,7 @@ const router = createRouter({
       ...workspaces.map(item => ({ path: `workspaces/${item.key}`, component: () => import('../views/WorkspaceView.vue'), meta: { permission: item.permission, workspace: item.key } })),
       { path: 'room-issues', component: () => import('../views/RoomIssuesView.vue'), meta: { permission: 'issue:report' } },
       { path: 'rooms', component: () => import('../views/RoomBoardView.vue'), meta: { permission: 'room:read' } },
+      { path: 'audit-logs', component: () => import('../views/AuditLogView.vue'), meta: { anyPermissions: ['audit:management', 'audit:business', 'audit:housekeeping'] } },
       { path: 'stays/new', component: () => import('../views/CheckInView.vue'), meta: { permission: 'stay:manage' } },
       { path: 'stays/history', component: () => import('../views/StayListView.vue'), meta: { permission: 'stay:manage' } },
       { path: 'stays', component: () => import('../views/StayListView.vue'), meta: { permission: 'stay:manage' } },
@@ -34,6 +35,7 @@ router.beforeEach(async to => {
   if (!auth.user) return { path: '/login', query: hadUser ? { reason: 'expired' } : {} }
   if (to.path === '/') return homePath()
   if (typeof to.meta.permission === 'string' && !can(to.meta.permission)) return '/forbidden'
+  if (Array.isArray(to.meta.anyPermissions) && !to.meta.anyPermissions.some(p => typeof p === 'string' && can(p))) return '/forbidden'
   return true
 })
 window.addEventListener('stayos:unauthorized', () => {

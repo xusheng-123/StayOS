@@ -33,7 +33,7 @@ StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统�
 
 前端：Vue 3 + TypeScript + Element Plus；后端：Java + Spring Boot；数据库：PostgreSQL；数据访问：MyBatis-Plus；身份权限：Spring Security；数据库迁移：Flyway；版本管理：Git。后端一个应用，按业务分模块，不使用微服务。
 
-第 1 阶段认证已经完成，见 [AUTHENTICATION.md](docs/AUTHENTICATION.md) 和 [PHASE1-DELIVERY.md](docs/PHASE1-DELIVERY.md)。第 2 阶段房型、房间及房态已完成，规则和接口见 [ROOMS.md](docs/ROOMS.md)，实际测试和交付见 [PHASE2-DELIVERY.md](docs/PHASE2-DELIVERY.md)。第 3 阶段入住规则与接口见 [CHECK-IN.md](docs/CHECK-IN.md)，验收结果见 [PHASE3-DELIVERY.md](docs/PHASE3-DELIVERY.md)。DEVELOPMENT 保留原始整体路线编号，用户最新阶段编号优先；第 4 阶段已实现正式退房、自动清洁任务及只读任务列表，规则见 [CHECK-OUT.md](docs/CHECK-OUT.md)，验收结果见 [PHASE4-DELIVERY.md](docs/PHASE4-DELIVERY.md)。第 5 阶段已实现人工清洁、人员批量分房、受控接管、开始/完成、历史及房态闭环，见 [HOUSEKEEPING.md](docs/HOUSEKEEPING.md) 和 [PHASE5-DELIVERY.md](PHASE5-DELIVERY.md)；第 6 阶段异常及维修停用见 [ROOM-ISSUES.md](docs/ROOM-ISSUES.md) 和 [PHASE6-DELIVERY.md](PHASE6-DELIVERY.md)。第 7 阶段正式换房已实现，实际规则见 [ROOM-CHANGES.md](docs/ROOM-CHANGES.md)，交付见 [PHASE7-DELIVERY.md](PHASE7-DELIVERY.md)。
+第 1 阶段认证已经完成，见 [AUTHENTICATION.md](docs/AUTHENTICATION.md) 和 [PHASE1-DELIVERY.md](docs/PHASE1-DELIVERY.md)。第 2 阶段房型、房间及房态已完成，规则和接口见 [ROOMS.md](docs/ROOMS.md)，实际测试和交付见 [PHASE2-DELIVERY.md](docs/PHASE2-DELIVERY.md)。第 3 阶段入住规则与接口见 [CHECK-IN.md](docs/CHECK-IN.md)，验收结果见 [PHASE3-DELIVERY.md](docs/PHASE3-DELIVERY.md)。DEVELOPMENT 保留原始整体路线编号，用户最新阶段编号优先；第 4 阶段已实现正式退房、自动清洁任务及只读任务列表，规则见 [CHECK-OUT.md](docs/CHECK-OUT.md)，验收结果见 [PHASE4-DELIVERY.md](docs/PHASE4-DELIVERY.md)。第 5 阶段已实现人工清洁、人员批量分房、受控接管、开始/完成、历史及房态闭环，见 [HOUSEKEEPING.md](docs/HOUSEKEEPING.md) 和 [PHASE5-DELIVERY.md](docs/PHASE5-DELIVERY.md)；第 6 阶段异常及维修停用见 [ROOM-ISSUES.md](docs/ROOM-ISSUES.md) 和 [PHASE6-DELIVERY.md](docs/PHASE6-DELIVERY.md)。第 7 阶段正式换房已实现，实际规则见 [ROOM-CHANGES.md](docs/ROOM-CHANGES.md)，交付见 [PHASE7-DELIVERY.md](docs/PHASE7-DELIVERY.md)。
 
 **未决事项等待规则：** 首个管理员、登录方式及第 2 阶段房间规则已确认；第 3 阶段已确认全部实际住客、证件/电话加密脱敏，以及 PostgreSQL 入住防重与 24 小时策略，见 CHECK-IN.md。真实试用的数据保留期限、身份核验、部署等仍按 PRD 第 9 节确认。触及未决事项或与已有功能冲突时立即暂停，等待明确反馈，不得把建议或沉默视为授权。按钮样式等普通细节可采用合理默认值并记录。
 
@@ -110,4 +110,10 @@ cd ..
 - 所有示例客人和号码都应当视为虚构数据；不要将真实客人的证件信息放进开发文档或代码仓库。
 - 在真实酒店使用之前，必须完成测试、安全检查、备份恢复验证，并确认酒店实际操作流程。
 
-第五阶段批量优化：[人员分房](http://127.0.0.1:5173/housekeeping/assignment)，仅客房主管和总经理可用。选择员工、多选房间、一次确认；合法空闲 DIRTY 房间无需预先逐间建单。所有角色自主领取关闭，服务员仅执行本人任务。见 [优化交付报告](PHASE5-BATCH-ASSIGNMENT-DELIVERY.md)。
+第五阶段批量优化：[人员分房](http://127.0.0.1:5173/housekeeping/assignment)，仅客房主管和总经理可用。选择员工、多选房间、一次确认；合法空闲 DIRTY 房间无需预先逐间建单。所有角色自主领取关闭，服务员仅执行本人任务。见 [优化交付报告](docs/PHASE5-BATCH-ASSIGNMENT-DELIVERY.md)。
+
+## 第八阶段：系统验收与运营准备
+
+复用现有审计表新增只读[操作记录](http://127.0.0.1:5173/audit-logs)页面。管理员查看账号、安全及基础配置审计；总经理查看酒店业务审计；客房主管仅查看清洁、异常和维修审计。前台及普通服务员继续使用原业务历史，角色操作权限没有扩张。
+
+备份和隔离恢复操作见 [BACKUP-RECOVERY.md](docs/BACKUP-RECOVERY.md)；正式试运行前逐项检查 [V1-RELEASE-CHECKLIST.md](docs/V1-RELEASE-CHECKLIST.md)。实际测试、故障恢复及性能数据见 [PHASE8-DELIVERY.md](PHASE8-DELIVERY.md)。开发环境验收通过不代表可以直接上线处理真实住客资料。

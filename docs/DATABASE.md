@@ -344,3 +344,7 @@ idempotency_requests 新增两种日志结果外键和操作白名单，原有�
 新增 housekeeping_assignment_batches（操作人、目标员工、服务器时间、必要备注）及 housekeeping_assignment_items（批次、房间、任务、房号快照、可选创建日志及必填分配日志）。条目通过复合外键验证房间/任务、日志/任务对应关系，批次内房间/任务唯一，分配日志唯一。原任务仍是唯一清洁业务模型。
 
 idempotency_requests 新增 result_assignment_batch_id，与原 result_stay_id/result_task_log_id 按操作类型互斥；新增 HK_BATCH_ASSIGN。HK_CLAIM 仅为历史兼容保留，服务和 HTTP 均拒绝新领取。V1—V9 不修改，不清空或覆盖业务资料。批次字段不包含住客资料或完整请求正文。参见 HOUSEKEEPING.md 批量优化规则。
+
+## 第8阶段核对
+
+复用现有audit_logs、业务历史及持久化幂等结构，通过现有索引和SQL分页实现授权审计查询，没有新增业务表或迁移。最高版本仍为V12，V1—V12不修改。约80间房和2万条隔离审计夹具的查询计划及性能测量见PHASE8-DELIVERY；没有根据未测量的假设添加索引。备份归档与对应密钥需分开保管，见BACKUP-RECOVERY.md。

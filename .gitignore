@@ -17,6 +17,8 @@ frontend/playwright-report/
 /StayOS房型与房间清单.xlsx
 /backups/
 *.dump
+*.dump.json
+*.partial
 *.backup
 *.bak
 *.key

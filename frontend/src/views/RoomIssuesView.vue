@@ -18,7 +18,7 @@ const maintenanceActive=computed(()=>maintenanceStops.value.find(s=>!s.resumedAt
 const activeStop = computed(() => stops.value.find(s => !s.resumedAt))
 const dialog = ref(false), operation = ref('report'), reason = ref(''), severity = ref('LOW'), type = ref('FACILITY'), description = ref(''), notes = ref('')
 const roomId = ref<number>(), rooms = ref<Room[]>([]), roomLoading = ref(false), busy = ref(false), operationError = ref('')
-const pending = ref<{key:string; path:string; op:string; body:unknown} | null>(null)
+const pending = ref<{key:string; path:string; op:string; body:unknown; uncertain?:boolean} | null>(null)
 const markerName = `stayos-room-operation-${auth.user?.id}`
 const recovered = ref<{key:string;op:string}|null>(null), markerError = ref('')
 const blocked = computed(() => !!pending.value || !!recovered.value || !!markerError.value)
@@ -79,11 +79,13 @@ async function submit() {
  }
  busy.value=true
  try {
-  const p=pending.value!;await api(p.path,{method:'POST',headers:{'Idempotency-Key':p.key},body:JSON.stringify(p.body)})
+  const p=pending.value!;const receipt=await api<{id:number;operatedAt:string}>(p.path,{method:'POST',headers:{'Idempotency-Key':p.key},body:JSON.stringify(p.body)})
+  if(!receipt || !Number.isSafeInteger(receipt.id) || receipt.id<1 || !Number.isFinite(Date.parse(receipt.operatedAt))) throw new ApiError(0,'INVALID_RESPONSE','服务器回执不完整，请保留原请求标识确认结果')
   clearMarker();dialog.value=false;success.value='操作成功，房态已按真实业务记录重新计算';await load();if(drawer.value&&detail.value) await show(detail.value.id);if(maintenanceDialog.value) await loadMaintenance()
  } catch(e) {
-  const uncertain=!(e instanceof ApiError) || e.status===0 || e.status>=500 || e.code==='INVALID_RESPONSE'
+  const uncertain=!!pending.value?.uncertain || !(e instanceof ApiError) || e.status===0 || e.status===401 || e.status>=500 || e.code==='INVALID_RESPONSE'
   operationError.value=message(e)+(uncertain?'。结果尚未确认，请重试原请求或查询原操作结果。':'')
+  if(uncertain && pending.value) pending.value.uncertain=true
   if(!uncertain) clearMarker()
  } finally { busy.value=false }
 }
