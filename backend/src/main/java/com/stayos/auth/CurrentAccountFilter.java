@@ -16,20 +16,28 @@ public class CurrentAccountFilter extends OncePerRequestFilter {
     private final UserMapper users;
     private final IpLoginLimiter limiter;
     private final ObjectMapper json;
-    public CurrentAccountFilter(UserMapper users, IpLoginLimiter limiter, ObjectMapper json) { this.users = users; this.limiter = limiter; this.json = json; }
+    private final ClientAddressResolver addresses;
+    public CurrentAccountFilter(UserMapper users, IpLoginLimiter limiter, ObjectMapper json,ClientAddressResolver addresses) { this.users = users; this.limiter = limiter; this.json = json;this.addresses=addresses; }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
-        if (request.getMethod().equals("POST") && request.getServletPath().equals("/api/auth/login") && !limiter.allow(request.getRemoteAddr())) {
+        if (request.getMethod().equals("POST") && request.getServletPath().equals("/api/auth/login") && !limiter.allow(addresses.resolve(request))) {
             response.setStatus(429); response.setHeader("Retry-After", "60"); response.setContentType("application/json;charset=UTF-8");
             json.writeValue(response.getOutputStream(), ApiResponse.error("TOO_MANY_REQUESTS", "登录尝试过于频繁，请稍后重试")); return;
         }
         var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof SessionIdentity identity) {
+        boolean sessionMaintenance = request.getMethod().equals("GET") && request.getServletPath().equals("/api/auth/csrf")
+            || request.getMethod().equals("POST") && request.getServletPath().equals("/api/auth/logout")
+            || request.getMethod().equals("GET") && (request.getServletPath().equals("/api/health") || request.getServletPath().equals("/api/health/ready"));
+        // CSRF and local session invalidation must remain available during a database outage.
+        if (!sessionMaintenance && auth != null && auth.getPrincipal() instanceof SessionIdentity identity) {
           try {
             var user = users.selectById(identity.userId());
             if (user == null || !user.enabled || user.securityVersion != identity.securityVersion()) {
                 var session = request.getSession(false);
                 if (session != null) session.invalidate();
                 SecurityContextHolder.clearContext();
+                response.setStatus(401);response.setContentType("application/json;charset=UTF-8");
+                json.writeValue(response.getOutputStream(),ApiResponse.error("UNAUTHORIZED","请重新登录"));
+                return;
             } else {
                 var fresh = SecurityContextHolder.createEmptyContext();
                 fresh.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(identity, null, RolePermissions.authorities(users.roles(user.id))));

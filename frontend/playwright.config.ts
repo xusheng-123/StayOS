@@ -1,5 +1,9 @@
 import { defineConfig } from '@playwright/test'
 
+// This pinned Playwright version can include filled password fields in its AI error snapshot.
+// Keep assertions/console results while excluding automatic DOM copies of credential/guest forms.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1'
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,

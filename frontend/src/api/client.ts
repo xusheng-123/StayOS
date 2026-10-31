@@ -1,7 +1,7 @@
 import type { ApiResponse } from '../types/auth'
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) { super(message) }
+  constructor(public status: number, public code: string, message: string, public requestId?: string) { super(message) }
 }
 async function send<T>(path: string, options: RequestInit): Promise<T> {
   let response: Response
@@ -11,7 +11,11 @@ async function send<T>(path: string, options: RequestInit): Promise<T> {
   let body: ApiResponse<T>
   try { body = await response.json() as ApiResponse<T> }
   catch { throw new ApiError(response.status, 'INVALID_RESPONSE', '服务器响应异常，请稍后重试') }
-  if (!response.ok || !body.success) throw new ApiError(response.status, body.code || 'REQUEST_FAILED', body.message || '操作失败')
+  if (!response.ok || !body.success) {
+    const id = response.headers.get('X-Request-ID') || undefined
+    const hint = response.status >= 500 && id && /^[a-f0-9-]{36}$/i.test(id) ? `（问题编号：${id}）` : ''
+    throw new ApiError(response.status, body.code || 'REQUEST_FAILED', (body.message || '操作失败') + hint, id)
+  }
   return body.data
 }
 export async function api<T>(path: string, options: RequestInit = {}, notifyUnauthorized = true): Promise<T> {

@@ -14,8 +14,9 @@ import java.util.*;
 public class IssueService {
  private final IssueMapper mapper; private final RoomMapper rooms; private final TaskAccess access;
  private final TaskMapper employees; private final IdempotencyService requests; private final AuditService audit; private final com.stayos.stay.mapper.StayMapper stayRequests;
- public IssueService(IssueMapper mapper,RoomMapper rooms,TaskAccess access,TaskMapper employees,IdempotencyService requests,AuditService audit,com.stayos.stay.mapper.StayMapper stayRequests) {
-  this.mapper=mapper;this.rooms=rooms;this.access=access;this.employees=employees;this.requests=requests;this.audit=audit;this.stayRequests=stayRequests;
+ private final com.stayos.auth.BusinessActorGuard actors;
+ public IssueService(IssueMapper mapper,RoomMapper rooms,TaskAccess access,TaskMapper employees,IdempotencyService requests,AuditService audit,com.stayos.stay.mapper.StayMapper stayRequests,com.stayos.auth.BusinessActorGuard actors) {
+  this.mapper=mapper;this.rooms=rooms;this.access=access;this.employees=employees;this.requests=requests;this.audit=audit;this.stayRequests=stayRequests;this.actors=actors;
  }
  private static final Set<String> TYPES=Set.of("FACILITY","ELECTRICAL","PLUMBING","SANITATION","SAFETY","OTHER"),SEVERITIES=Set.of("LOW","MEDIUM","CRITICAL"),STATES=Set.of("OPEN","IN_PROGRESS","RESOLVED");
  private ApiException conflict(String s) { return new ApiException(409,"ISSUE_CONFLICT",s); }
@@ -25,7 +26,7 @@ public class IssueService {
  }
  private void enumValue(String s,Set<String> set) { valid(s!=null && set.contains(s),"异常分类、严重程度或状态不正确"); }
  private boolean all(long actor) { var p=access.permissions(actor);return p.contains("issue:resolve") || p.contains("stay:manage"); }
- private void lockActor(long actor,String permission) { if(employees.lockEmployee(actor)==null) throw new ApiException(403,"ACCOUNT_UNAVAILABLE","账号不可用");access.require(actor,permission); }
+ private void lockActor(long actor,String permission) { if(employees.lockEmployee(actor)==null) throw new ApiException(403,"ACCOUNT_UNAVAILABLE","账号不可用");actors.require(actor,permission); }
  private void lockRoom(long id) { if(rooms.lock(id)==null) throw new ApiException(404,"ROOM_NOT_FOUND","房间不存在"); }
  // Shared order: idempotency -> actor(shared) -> room -> issue/stop -> log/audit/result.
  // No stay locks here, so no cycle with checkout's stay -> room order.

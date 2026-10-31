@@ -13,8 +13,10 @@ public interface CheckoutMapper {
     Segment current(long id);
     @Select("select id,room_id,entered_at from stay_room_segments where stay_record_id=#{id} and exited_at is null for update")
     Segment lockCurrent(long id);
-    @Update("update stay_records set status='CHECKED_OUT',actual_check_out_at=#{time},checked_out_by=#{actor},updated_at=#{time} where id=#{id} and status='IN_HOUSE'")
+    @Update("update stay_records set status='CHECKED_OUT',actual_check_out_at=#{time},checked_out_by=#{actor},updated_at=#{time},version=version+1 where id=#{id} and status='IN_HOUSE'")
     int closeStay(@Param("id") long id,@Param("actor") long actor,@Param("time") OffsetDateTime time);
+    @Update("update stay_records set version=version+1,updated_at=#{time} where id=#{id} and status='IN_HOUSE'")
+    int changed(@Param("id") long id,@Param("time") OffsetDateTime time);
     @Update("update stay_room_segments set exited_at=#{time},end_reason='CHECK_OUT' where id=#{id} and exited_at is null")
     int closeSegment(@Param("id") long id,@Param("time") OffsetDateTime time);
     @Update("update rooms set cleaning_status='DIRTY',version=version+1,updated_at=#{time} where id=#{id}")

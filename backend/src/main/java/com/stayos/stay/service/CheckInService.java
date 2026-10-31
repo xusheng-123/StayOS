@@ -17,8 +17,9 @@ public class CheckInService {
     private final GuestProtection protection;
     private final AuditService audit;
     private final IdempotencyService requests;
-    public CheckInService(StayMapper stays,RoomMapper rooms,GuestProtection protection,AuditService audit,IdempotencyService requests) {
-        this.stays=stays;this.rooms=rooms;this.protection=protection;this.audit=audit;this.requests=requests;
+    private final com.stayos.auth.BusinessActorGuard actors;
+    public CheckInService(StayMapper stays,RoomMapper rooms,GuestProtection protection,AuditService audit,IdempotencyService requests,com.stayos.auth.BusinessActorGuard actors) {
+        this.stays=stays;this.rooms=rooms;this.protection=protection;this.audit=audit;this.requests=requests;this.actors=actors;
     }
     private static String text(String s) { return s==null?"":s.trim(); }
     private static ApiException invalid(String message) { return new ApiException(400,"VALIDATION_ERROR",message); }
@@ -29,11 +30,8 @@ public class CheckInService {
         for(var guest:input.guests()) {
             if(guest==null) throw invalid("请补全住客信息");
             String name=text(guest.name()),type=text(guest.documentType()),number=text(guest.documentNumber()).toUpperCase(Locale.ROOT),phone=text(guest.phone()),notes=text(guest.notes());
-            if(name.isEmpty() || name.length()>100 || name.chars().anyMatch(Character::isISOControl)) throw invalid("请填写有效的住客姓名");
-            boolean valid=switch(type) { case "ID_CARD"->number.matches("[0-9]{17}[0-9X]");case "PASSPORT"->number.matches("[A-Z0-9]{3,30}");case "OTHER"->number.matches("[A-Z0-9_/-]{3,64}");default->false; };
-            if(!valid) throw invalid("证件类型或号码格式不正确；格式检查不代表身份核验");
+            GuestValidation.require(name,type,number,phone);
             if(!documents.add(type+":"+number)) throw invalid("同一次入住不能重复登记相同证件");
-            if(phone.length()>30 || (!phone.isEmpty() && !phone.matches("[+0-9() -]{3,30}"))) throw invalid("联系电话格式不正确");
             if(notes.length()>1000) throw invalid("住客备注不能超过 1000 字");
             if(guest.primary()) primary++;
             guests.add(new GuestInput(name,type,number,phone,notes,guest.primary()));
@@ -46,6 +44,7 @@ public class CheckInService {
     public long create(long actor,String requestKey,CheckIn raw) {
         CheckIn input=normalize(raw);
         Long previous=requests.reserve(actor,"CHECK_IN",requestKey,input);
+        actors.require(actor,"stay:manage");
         if(previous!=null) return previous;
         if(rooms.lock(input.roomId())==null) throw new ApiException(404,"ROOM_NOT_FOUND","房间不存在");
         var room=rooms.detail(input.roomId());

@@ -1,10 +1,28 @@
 # 酒店前台与客房协同管理系统｜接口说明草案
 
+> V1.2 已实现住客受控更正，新增契约见本文末尾 V1.2 节；权限/脱敏/重试规则及最终本地验收见 [V1.2 交付记录](releases/V1.2-DELIVERY.md)。旧章节保留其原版本边界。
+
 > **这份文档是做什么的？** 它约定前端页面如何向后端请求数据，以及后端会返回什么。可以把“接口/API”理解成网页和服务器之间的办事窗口：网页提交请求，服务器验证规则、处理业务，再把结果返回。
 >
 > **初学者提醒：** 本文同时保留实际接口和后续设计草案。已实现部分按下方“当前实现进度”及各节标注识别；未实现的后续扩展示例不能当作已经运行的程序。
 
-> **版本边界：** 第 4—10 节及第 11 节的管理/历史接口属于第一版。第 12 节为第二阶段收费参考，第一版不实现、不提供空接口或页面；退房不要求账单、支付信息或结算状态。第一版无主管验收、住中清洁、预订和续住接口。
+> **版本边界：** 第 4—10 节及第 11 节的管理/历史接口属于 V1.0。第 12 节为第二阶段收费参考，V1.0/V1.1 不实现；退房不要求账单、支付信息或结算状态。V1.0 无续住接口；V1.1 增量见下节与 [交付记录](releases/V1.1-DELIVERY.md)，验收状态以交付记录为准。主管验收、住中清洁、预订及客资更正不在 V1.1 范围。
+
+## V1.1 增量：续住与预计离店调整
+
+仅 `stay:manage`（前台/总经理），使用既有 Session、CSRF 和统一 JSON。入住列表/详情新增 `version`；入住初始为 0，续住、换房、退房成功增加版本。原退房和换房请求仍兼容原字段；新增续住提交强制检查版本和当前使用段。
+
+| 方法与路径 | 输入/输出 | 规则 |
+| --- | --- | --- |
+| `POST /api/stays/{id}/extensions` | `{segmentId,version,newExpectedCheckOutAt,reason}` + UUID `Idempotency-Key` | 新时间带时区且晚于当前/入住时间；原因 1～1000 字；仅在住；允许延长和缩短 |
+| `GET /api/stays/{id}/extensions?page=1&pageSize=20` | `{items,total,page,pageSize}`，pageSize 1～100 | 按变更 ID 倒序；已退房仍可查询 |
+| `GET /api/stays/extensions/result/{key}` | 当前操作人的原始成功回执 | 其他操作人即使有前台权限也查不到该 key；404 不代表原操作确定失败 |
+
+回执字段：`id,stayRecordId,segmentId,roomId,roomNumber,oldExpectedCheckOutAt,newExpectedCheckOutAt,reason,operatorId,operatorName,operatedAt,stayVersion`。输入时间规范化为 UTC 微秒；界面明确北京时间。回执不包含住客姓名、证件或电话；员工姓名读取当前员工显示名。
+
+`STALE_STAY_VERSION`/`STALE_ROOM_SEGMENT`/`STAY_ALREADY_CHECKED_OUT` 为 409；参数、无变化时间为 400。继续复用 24 小时幂等：相同 key/payload 返回原回执，即使之后又续住/退房；异 payload 和过期 key 拒绝。已过期 key 的历史回执仍可查询，查询不产生新操作。写操作重放仍复核账号、权限及会话安全版本。
+
+成功仅更新预计离店时间和入住版本，追加事实与审计；不释放房间、不建入住/使用段/清洁任务、不涉及费用。`reason` 不应填写敏感住客资料。
 
 > **当前实现进度：** 第 1 阶段完成认证及账号/角色；第 2 阶段完成房间与房态，见 ROOMS.md；第 3 阶段入住、当前与历史入住查询见 CHECK-IN.md 和第 6 节。第 4 阶段退房见 CHECK-OUT.md；第 5 阶段清洁处理及人员批量分房见 HOUSEKEEPING.md 和PHASE5-BATCH-ASSIGNMENT-DELIVERY.md（PHASE5-DELIVERY 为优化前快照）；第 6 阶段异常及维修停用已实现，见 ROOM-ISSUES.md；第7阶段正式换房见ROOM-CHANGES.md和第8节。各阶段交付文档是当时的验收快照。
 
@@ -407,3 +425,33 @@ reasonType 为 GUEST_REQUEST/ROOM_ISSUE/OTHER，说明必填；ROOM_ISSUE 的 is
 只返回事件ID、操作人员ID/当前姓名及账号、动作、业务对象类型/ID、结果和服务器时间，不返回正文、住客资料、凭据或密钥。旧审计没有记下的字段不补造；人员姓名是当前资料，不是历史姓名快照。自动清洁建单记录见原任务历史；批量分房按每条HK_ASSIGN事实展示，不伪造历史批次审计。历史HK_CLAIM允许在授权范围只读显示，所有角色自主领取接口仍拒绝。
 
 数据库暂不可用/查询超时可返回503 `SERVICE_UNAVAILABLE`。失败审计本身也不可写时仅输出不含SQL及请求内容的固定运维提示；业务成功所需的审计仍必须随事务成功，否则回滚。客户端保留不确定操作的原请求标识，不能把503误认为操作一定没有执行。
+## 验收后安全与运营接口补充
+
+此节记录第八阶段验收后的增量完善，不改变原有业务幂等、五角色或V12数据结构。
+
+| 方法与路径 | 用途 | 权限 |
+|---|---|---|
+| GET /api/health/ready | 实际数据库就绪检查；成功200、不可用503，无连接详情 | 无需登录，仅读状态 |
+| GET /api/operations/summary | 当前岗位的运营待办、数量和提醒阈值 | 前台/总经理/客房主管/服务员，后端限制数据范围；ADMIN默认403 |
+| GET /api/users?search=&page=1&pageSize=20 | 原账号列表新增账号/姓名搜索，search最多100字 | system:manage |
+
+运营汇总：`generatedAt`、`overdueStays`、`unassignedTasks`、`delayedTasks`、`strandedTasks`、`criticalIssues`、`maintenanceStops`、`pendingWarningMinutes`、`cleaningWarningMinutes`、`items`。不授权的计数返回null，列表不返回住客姓名、证件或电话。
+
+前台获得在住超预计时间和授权异常信息；客房主管获得全部客房任务及异常信息；总经理合并；普通服务员只获得本人清洁任务和本人上报的严重异常，不开放未分配任务池。人工维修停用数量属于已有房态查询范围。每类提醒明细最多20项，计数为完整统计，不允许客户端扩展查询范围。
+
+每个HTTP响应带服务器生成的 `X-Request-ID`，客户端传入的同名头不作为日志编号。5xx页面附该编号便于查脱敏日志；不把请求正文、原始异常、SQL或凭据返回客户端。
+
+退出仍需POST和有效CSRF。数据库不可用时CSRF与会话退出可继续，退出审计失败不阻断会话撤销；业务成功审计仍保持失败回滚。入住/退房新增事务内操作人共享锁及启用、角色、会话版本复查，与既有换房/清洁/异常锁顺序一致。
+
+## V1.2 住客资料受控更正
+
+仅 `stay:guest-correct`（前台/总经理）；入住详情的住客含 `version`。仅在住登记笔误；不替换住客、不增减同住人、不改变主要联系人。
+
+- `POST /api/stays/{stayId}/guests/{guestId}/corrections`，UUID `Idempotency-Key`；请求 `{version, changes, reason}`。
+- `changes` 只允许 `name/documentType/documentNumber/phone`，每项必须字符串；未提交字段保留原值，`phone:""` 明确清空，`null` 拒绝。证件号码规范化为大写，遵循入住同一套格式与同次入住重复校验。掩码不能作为号码提交。无变化拒绝，原因 1—1000 字且不填写敏感号码。
+- `GET /api/stays/{stayId}/guests/{guestId}/corrections?page=1&pageSize=20`，每页 1—100，历史入住仍可查。返回 `{items,total,page,pageSize}`。
+- `GET /api/stays/guest-corrections/result/{key}` 仅当前员工自己的回执；404 不证明原操作失败，过期成功结果仍可查询。
+- 回执：`id,stayRecordId,guestId,guestVersion,operatorId,operatorName,operatedAt,reason,changedFields,before,after`。`before/after` 仅脱敏四字段；姓名同样掩码，证件类型保留枚举。操作人名称为当前员工显示名。无完整号码或密文读取接口。
+- 写事务先预留幂等，再复核真实操作人，锁入住和按 ID 排序的住客快照；与退房/换房串行。版本不匹配 409 `STALE_GUEST_VERSION`，已退房 409，错误入住/住客 404；参数无效 400。
+- 重放返回原始脱敏回执；24 小时过期 key 不自动复用。业务事实、当前投影、审计 `GUEST_CORRECT` 和回执指针共同提交/回滚。
+- 浏览器只持久化 UUID。关闭时清空敏感输入及内存 payload；重开/刷新查询回执，绝不自动用新 key 重发。

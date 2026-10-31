@@ -17,8 +17,9 @@ public class RoomChangeService {
  private final RoomChangeMapper changes; private final CheckoutMapper stays; private final StayMapper requestsMapper;
  private final RoomMapper rooms; private final RoomCatalogService catalog; private final TaskMapper employees;
  private final TaskAccess access; private final TaskCreationService tasks; private final IdempotencyService requests; private final AuditService audit;
- public RoomChangeService(RoomChangeMapper changes,CheckoutMapper stays,StayMapper requestsMapper,RoomMapper rooms,RoomCatalogService catalog,TaskMapper employees,TaskAccess access,TaskCreationService tasks,IdempotencyService requests,AuditService audit) {
-  this.changes=changes;this.stays=stays;this.requestsMapper=requestsMapper;this.rooms=rooms;this.catalog=catalog;this.employees=employees;this.access=access;this.tasks=tasks;this.requests=requests;this.audit=audit;
+ private final com.stayos.auth.BusinessActorGuard actors;
+ public RoomChangeService(RoomChangeMapper changes,CheckoutMapper stays,StayMapper requestsMapper,RoomMapper rooms,RoomCatalogService catalog,TaskMapper employees,TaskAccess access,TaskCreationService tasks,IdempotencyService requests,AuditService audit,com.stayos.auth.BusinessActorGuard actors) {
+  this.changes=changes;this.stays=stays;this.requestsMapper=requestsMapper;this.rooms=rooms;this.catalog=catalog;this.employees=employees;this.access=access;this.tasks=tasks;this.requests=requests;this.audit=audit;this.actors=actors;
  }
  private ApiException conflict(String message) { return new ApiException(409,"ROOM_CHANGE_CONFLICT",message); }
  private record Canonical(long stayId,long segmentId,long targetRoomId,String reasonType,String reason,Long issueId) {}
@@ -33,7 +34,7 @@ public class RoomChangeService {
   Long previous=requests.reserveChange(actor,key,new Canonical(stayId,raw.segmentId(),raw.targetRoomId(),raw.reasonType(),reason,raw.issueId()));
   if(previous!=null) return required(previous);
   // Shared order: reservation -> actor(shared) -> stay -> rooms ascending -> current segment.
-  if(employees.lockEmployee(actor)==null) throw new ApiException(403,"ACCOUNT_UNAVAILABLE","账号不可用");access.require(actor,"stay:manage");
+  if(employees.lockEmployee(actor)==null) throw new ApiException(403,"ACCOUNT_UNAVAILABLE","账号不可用");actors.require(actor,"stay:manage");
   var stay=stays.lockStay(stayId);
   if(stay==null) throw new ApiException(404,"STAY_NOT_FOUND","入住记录不存在");
   if(!"IN_HOUSE".equals(stay.status)) throw conflict("入住已经结束，不能换房");
@@ -56,7 +57,7 @@ public class RoomChangeService {
   var r=new Result();r.stayRecordId=stayId;r.oldRoomId=source.id;r.newRoomId=target.id;r.oldSegmentId=segment.id;r.newSegmentId=((Number)row.get("id")).longValue();
   r.reasonType=raw.reasonType();r.reason=reason;r.issueId=raw.issueId();r.changedAt=now;r.operatedBy=actor;
   r.oldRoomNumber=old.roomNumber();r.oldRoomTypeName=old.roomTypeName();r.newRoomNumber=target.roomNumber;r.newRoomTypeName=target.roomTypeName;
-  if(changes.insert(r)!=1 || stays.dirty(source.id,now)!=1) throw new IllegalStateException("Room change fact missing");
+  if(changes.insert(r)!=1 || stays.dirty(source.id,now)!=1 || stays.changed(stayId,now)!=1) throw new IllegalStateException("Room change fact missing");
   tasks.fromRoomChange(source.id,stayId,segment.id,r.id,actor,now);
   audit.success(actor,"ROOM_CHANGE","ROOM_CHANGE",r.id);requests.completeChange(actor,key,r.id);return required(r.id);
  }

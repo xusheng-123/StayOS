@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Container,
     [Parameter(Mandatory)][string]$Database,
     [string]$User = 'stayos',
-    [string]$OutputDirectory = (Join-Path (Split-Path $PSScriptRoot -Parent) 'backups')
+    [string]$OutputDirectory = (Join-Path (Split-Path $PSScriptRoot -Parent) 'backups'),
+    [ValidatePattern('^[a-fA-F0-9]{64}$')][string]$GuestKeyFingerprint
 )
 . "$PSScriptRoot/database-common.ps1"
 Assert-DatabaseTarget $Container $Database $User
@@ -33,6 +34,7 @@ try {
     $version = (Invoke-DatabaseTool @('exec', $Container, 'psql', '-U', $User, '-d', $Database, '-At', '-c', 'show server_version')).Trim()
     Move-Item -LiteralPath $partial -Destination $archive -ErrorAction Stop
     $meta = @{ format = 'StayOS/pg_dump/custom/v1'; database = $Database; createdUtc = [DateTime]::UtcNow.ToString('o'); sha256 = $hash; bytes = (Get-Item -LiteralPath $archive).Length; postgresVersion = $version; guestKeyId = 'v1'; keyIncluded = $false }
+    if ($GuestKeyFingerprint) { $meta.guestKeyFingerprint=$GuestKeyFingerprint.ToLowerInvariant() }
     $meta | ConvertTo-Json | Set-Content -LiteralPath $manifest -Encoding utf8 -NoNewline
     Protect-BackupPath $manifest
     $timer.Stop()

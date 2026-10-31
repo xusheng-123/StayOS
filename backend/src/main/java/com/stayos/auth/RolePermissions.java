@@ -7,10 +7,10 @@ public final class RolePermissions {
     public static final Set<String> ROLES = Set.of("ADMIN", "HOTEL_MANAGER", "FRONT_DESK", "HOUSEKEEPING_MANAGER", "HOUSEKEEPING_STAFF");
     private static final Map<String, Set<String>> MAPPING = Map.of(
         "ADMIN", Set.of("room:read", "room:manage", "system:manage", "audit:management"),
-        "FRONT_DESK", Set.of("room:read", "stay:manage", "issue:report"),
+        "FRONT_DESK", Set.of("room:read", "stay:manage", "stay:guest-correct", "issue:report"),
         "HOUSEKEEPING_STAFF", Set.of("room:read", "housekeeping:read", "housekeeping:execute", "issue:report"),
         "HOUSEKEEPING_MANAGER", Set.of("room:read", "housekeeping:read", "housekeeping:execute", "housekeeping:manage", "issue:report", "issue:resolve", "audit:housekeeping"),
-        "HOTEL_MANAGER", Set.of("room:read", "stay:manage", "housekeeping:read", "housekeeping:execute", "housekeeping:manage", "issue:report", "issue:resolve", "manager:workspace", "audit:business")
+        "HOTEL_MANAGER", Set.of("room:read", "stay:manage", "stay:guest-correct", "housekeeping:read", "housekeeping:execute", "housekeeping:manage", "issue:report", "issue:resolve", "manager:workspace", "audit:business")
     );
     private RolePermissions() {}
     public static Set<String> permissions(Collection<String> roles) {

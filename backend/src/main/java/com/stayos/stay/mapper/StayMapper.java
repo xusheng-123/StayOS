@@ -13,9 +13,9 @@ public interface StayMapper {
         on conflict(operator_id,operation,request_key) do nothing
         """)
     int reserve(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("hash") String hash);
-    class RequestResult { public String requestHash; public Long resultStayId,resultTaskLogId,resultAssignmentBatchId,resultIssueLogId,resultMaintenanceLogId,resultRoomChangeId; public Boolean expired; }
+    class RequestResult { public String requestHash; public Long resultStayId,resultTaskLogId,resultAssignmentBatchId,resultIssueLogId,resultMaintenanceLogId,resultRoomChangeId,resultStayExtensionId,resultGuestCorrectionId; public Boolean expired; }
     @Select("""
-        select request_hash,result_stay_id,result_task_log_id,result_assignment_batch_id,result_issue_log_id,result_maintenance_log_id,result_room_change_id,expires_at <= clock_timestamp() expired
+        select request_hash,result_stay_id,result_task_log_id,result_assignment_batch_id,result_issue_log_id,result_maintenance_log_id,result_room_change_id,result_stay_extension_id,result_guest_correction_id,expires_at <= clock_timestamp() expired
         from idempotency_requests where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)
         """)
     RequestResult request(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key);
@@ -31,6 +31,10 @@ public interface StayMapper {
     int completeMaintenance(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("log") long log);
     @Update("update idempotency_requests set result_room_change_id=#{change} where operator_id=#{actor} and operation='ROOM_CHANGE' and request_key=CAST(#{key} AS uuid)")
     int completeChange(@Param("actor") long actor,@Param("key") String key,@Param("change") long change);
+    @Update("update idempotency_requests set result_stay_extension_id=#{extension} where operator_id=#{actor} and operation='STAY_EXTEND' and request_key=CAST(#{key} AS uuid)")
+    int completeExtension(@Param("actor") long actor,@Param("key") String key,@Param("extension") long extension);
+    @Update("update idempotency_requests set result_guest_correction_id=#{correction} where operator_id=#{actor} and operation='GUEST_CORRECT' and request_key=CAST(#{key} AS uuid)")
+    int completeCorrection(@Param("actor") long actor,@Param("key") String key,@Param("correction") long correction);
     @Insert("""
         insert into stay_records(check_in_at,expected_check_out_at,created_by,notes)
         values(#{checkInAt},#{expectedCheckOutAt},#{actor},#{notes})
@@ -59,7 +63,7 @@ public interface StayMapper {
     @Select(VIEW+" where s.id=#{id}")
     StayView detail(long id);
     @Select("""
-        select g.id,g.display_name name,g.document_type,g.document_mask document_number,g.phone_mask phone,g.notes,sg.is_primary as "primary"
+        select g.id,g.version,g.display_name name,g.document_type,g.document_mask document_number,g.phone_mask phone,g.notes,sg.is_primary as "primary"
         from stay_guests sg join guests g on g.id=sg.guest_id where sg.stay_record_id=#{id} order by sg.position
         """)
     List<StayView.Guest> guests(long id);

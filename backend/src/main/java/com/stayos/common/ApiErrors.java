@@ -33,6 +33,7 @@ public class ApiErrors {
         recordFailure();
         String detail = error.getMostSpecificCause().getMessage();
         String code="DATA_CONFLICT", message="数据冲突，请刷新后重试";
+        if (detail != null && detail.contains("users_username_key")) { code="USERNAME_EXISTS"; message="员工账号已存在，请刷新列表核对或使用其他账号"; }
         if (detail != null && detail.contains("uq_room_number")) { code="ROOM_NUMBER_EXISTS"; message="房号已存在，请使用其他房号"; }
         else if (detail != null && detail.contains("uq_room_type_code")) { code="ROOM_TYPE_CODE_EXISTS"; message="房型编码已存在，请使用其他编码"; }
         else if (detail != null && detail.contains("uq_room_active_segment")) { code="ROOM_NOT_AVAILABLE"; message="房间已被其他操作占用，请刷新后重试"; }
@@ -57,5 +58,8 @@ public class ApiErrors {
     @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
     ResponseEntity<?> method(Exception ignored) { return ResponseEntity.status(405).body(ApiResponse.error("METHOD_NOT_ALLOWED","此接口不支持该操作")); }
     @ExceptionHandler(Exception.class)
-    ResponseEntity<?> unexpected(Exception ignored) { recordFailure(); return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "操作失败，请稍后重试")); }
+    ResponseEntity<?> unexpected(Exception failure) {
+        log.error("Unexpected request failure id={} category={}",org.slf4j.MDC.get("requestId"),failure.getClass().getSimpleName());
+        recordFailure(); return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "操作失败，请稍后重试"));
+    }
 }

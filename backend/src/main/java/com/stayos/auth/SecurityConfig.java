@@ -20,6 +20,7 @@ import java.util.List;
 @EnableMethodSecurity
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityConfig {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SecurityConfig.class);
     @Bean SecurityContextRepository securityContextRepository() { return new HttpSessionSecurityContextRepository(); }
     @Bean CsrfTokenRepository csrfTokenRepository() { return new HttpSessionCsrfTokenRepository(); }
     @Bean SessionAuthenticationStrategy sessionAuthenticationStrategy(CsrfTokenRepository csrf) {
@@ -30,18 +31,19 @@ public class SecurityConfig {
         json.writeValue(response.getOutputStream(), ApiResponse.error(code, message));
     }
     @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository contexts,
-            CsrfTokenRepository csrf, UserMapper users, IpLoginLimiter limiter, ObjectMapper json, AuditService audit) throws Exception {
+            CsrfTokenRepository csrf, UserMapper users, IpLoginLimiter limiter, ObjectMapper json, AuditService audit,ClientAddressResolver addresses) throws Exception {
         http.securityContext(context -> context.securityContextRepository(contexts).requireExplicitSave(true))
             .csrf(config -> config.csrfTokenRepository(csrf))
             .requestCache(cache -> cache.disable())
             .formLogin(form -> form.disable()).httpBasic(basic -> basic.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/api/auth/csrf", "/api/auth/login").permitAll()
+                .requestMatchers("/api/health", "/api/health/ready", "/api/auth/csrf", "/api/auth/login").permitAll()
                 .requestMatchers("/api/auth/me", "/api/auth/status", "/api/auth/logout", "/api/workspaces/**", "/api/users/**", "/api/roles").authenticated()
                 .requestMatchers("/api/room-types", "/api/room-types/**", "/api/rooms", "/api/rooms/**", "/api/room-status", "/api/room-status/**", "/api/floors").authenticated()
                  .requestMatchers("/api/room-issues", "/api/room-issues/**", "/api/room-operations/**").authenticated()
                 .requestMatchers("/api/stays", "/api/stays/**").authenticated()
                 .requestMatchers("/api/audit-logs", "/api/audit-logs/**").authenticated()
+                .requestMatchers("/api/operations/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors
@@ -55,13 +57,19 @@ public class SecurityConfig {
                 }))
             .logout(logout -> logout.logoutUrl("/api/auth/logout")
                 .addLogoutHandler((request, response, auth) -> {
-                    if (auth != null && auth.getPrincipal() instanceof SessionIdentity id) audit.success(id.userId(), "LOGOUT", "USER", id.userId());
+                    if (auth != null && auth.getPrincipal() instanceof SessionIdentity id) {
+                        try { audit.success(id.userId(), "LOGOUT", "USER", id.userId()); }
+                        catch (RuntimeException failure) {
+                            // Unlike a hotel business commit, logout must always revoke the session.
+                            log.warn("Logout audit unavailable id={}; session invalidation will continue.",org.slf4j.MDC.get("requestId"));
+                        }
+                    }
                 })
                 .deleteCookies("STAYOS_SESSION")
                 .logoutSuccessHandler((request, response, auth) -> {
                     response.setContentType("application/json;charset=UTF-8"); json.writeValue(response.getOutputStream(), ApiResponse.ok(null));
                 }))
-            .addFilterBefore(new CurrentAccountFilter(users, limiter, json), CsrfFilter.class);
+            .addFilterBefore(new CurrentAccountFilter(users, limiter, json,addresses), CsrfFilter.class);
         return http.build();
     }
 }

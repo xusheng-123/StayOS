@@ -26,7 +26,7 @@ public class AccountController {
         @Override public String toString() { return "Password[REDACTED]"; }
     }
     private long actor(Authentication auth) { return ((SessionIdentity) auth.getPrincipal()).userId(); }
-    @GetMapping("/users") public ApiResponse<?> list(@RequestParam(defaultValue="1") int page, @RequestParam(defaultValue="20") int pageSize) { return ApiResponse.ok(accounts.list(page, pageSize)); }
+    @GetMapping("/users") public ApiResponse<?> list(@RequestParam(defaultValue="1") int page, @RequestParam(defaultValue="20") int pageSize,@RequestParam(defaultValue="") String search) { return ApiResponse.ok(accounts.list(page, pageSize,search)); }
     @GetMapping("/roles") public ApiResponse<?> roles() { return ApiResponse.ok(new TreeSet<>(RolePermissions.ROLES)); }
     @PostMapping("/users") public ApiResponse<?> create(@Valid @RequestBody NewUser input, Authentication auth) {
         return ApiResponse.ok(accounts.create(actor(auth), input.username(), input.password(), input.displayName(), input.roles()));

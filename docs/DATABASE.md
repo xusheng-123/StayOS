@@ -1,5 +1,19 @@
 # 酒店前台与客房协同管理系统｜数据库设计草案
 
+当前增量为 V1.2 / V14，定义见本文末尾，最终本地验收见 [交付记录](releases/V1.2-DELIVERY.md)。以下 V13 为续住历史增量。
+
+## V1.1 增量（V13，2026-10-31）
+
+实现与验收进度见 [V1.1 交付记录](releases/V1.1-DELIVERY.md)。迁移文件为 `V13__stay_extensions.sql`，不修改 V1～V12。
+
+- `stay_records.version BIGINT NOT NULL DEFAULT 0 CHECK(version>=0)`：兼容旧行；续住、退房、换房均增加版本并更新 updated_at，其他原业务字段保持对应原规则。
+- `stay_extensions`：id、stay_record_id、segment_id、room_id、old_expected_check_out_at、new_expected_check_out_at、reason、operator_id、operated_at、stay_version。时间 TIMESTAMPTZ；原因 1～1000 字；新预计时间晚于操作时刻，原/新不得相同。
+- 使用段/入住/房间三元外键指向现有 `uq_segment_business_reference`；`UNIQUE(stay_record_id,stay_version)` 防止同版本重复事实；倒序历史索引 `(stay_record_id,id DESC)`。
+- 插入触发器校验在住状态、有效使用段、当前新时间及版本匹配，阻止虚构变更事实。应用按幂等 → 操作人共享锁 → 入住 → 房间 → 使用段顺序执行，更新与历史/审计共同提交。
+- 幂等表新增 `result_stay_extension_id` 外键与 `STAY_EXTEND` 类型，扩展结果类别约束；原类型禁止填入续住结果。预留时允许结果为空，成功回执在同一事务补齐。
+- 运行角色对新历史表只 SELECT/INSERT，序列按既有授权；无 UPDATE/DELETE。生产新增迁移后需由原运维流程复核执行授权，本轮不修改现有开发角色。
+- 不新增账务、预订、住客编辑、清洁任务；敏感原字段和密钥配置不变。
+
 > **这份文档是做什么的？** 它说明系统需要保存哪些数据、不同数据之间是什么关系。数据库可以理解为系统长期保存信息的结构化仓库。
 >
 > **重要提醒：** 这是面向初学者的“概念设计草案”，不是已经执行的 SQL，也不是最终数据库标准。真正建表前，要根据 PRD 和真实酒店流程复核。表名和字段名可以调整，但业务含义不能随意丢失。
@@ -348,3 +362,11 @@ idempotency_requests 新增 result_assignment_batch_id，与原 result_stay_id/r
 ## 第8阶段核对
 
 复用现有audit_logs、业务历史及持久化幂等结构，通过现有索引和SQL分页实现授权审计查询，没有新增业务表或迁移。最高版本仍为V12，V1—V12不修改。约80间房和2万条隔离审计夹具的查询计划及性能测量见PHASE8-DELIVERY；没有根据未测量的假设添加索引。备份归档与对应密钥需分开保管，见BACKUP-RECOVERY.md。
+
+## V1.2 / V14 增量
+
+`V14__guest_corrections.sql` 为 guests 增加 `version BIGINT NOT NULL DEFAULT 0 CHECK>=0`。旧资料与 AES-GCM 密文不重写。`stay_guests.guest_id` 唯一，落实每次登记独占快照；已有异常共享数据会阻止迁移，应核查来源后修复，不可静默复制历史。
+
+新增只追加 `guest_corrections`：入住/住客组合外键、住客新版本唯一、员工/原因/服务器时刻、changed_fields、脱敏 before_summary/after_summary JSONB、加密 before_ciphertext/after_ciphertext。完整四字段快照以 `StayOS/v1/guest-correction` AAD 加密，每次随机 IV；现有 document/phone AAD 不变。普通查询不选密文。触发器核验在住、版本、操作时刻和脱敏当前投影一致性。索引 `(stay_record_id,guest_id,id DESC)`。
+
+幂等新增 `GUEST_CORRECT` 和 `result_guest_correction_id` FK，保留旧操作全部结果类型约束。运行角色显式增加 guests UPDATE、guest_corrections INSERT，历史更正表仍无 UPDATE/DELETE。更正不更新入住版本，不改变房间/使用段/同住关联/清洁任务。入住锁保证与退房/换房串行；同入住所有住客 ID 升序加锁保证重复证件校验。

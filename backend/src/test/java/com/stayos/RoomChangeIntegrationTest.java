@@ -87,7 +87,9 @@ class RoomChangeIntegrationTest {
   var b=login("FRONT_DESK");long a=room(),target=room();var s=checkIn(a);var before=db.queryForMap("select * from stay_records where id=?",s.path("id").asLong());
   var guests=db.queryForList("select * from stay_guests where stay_record_id=? order by position",s.path("id").asLong());var start=Instant.now().minusSeconds(1);
   var r=ok(b.change(s,target,key()));assertThat(OffsetDateTime.parse(r.path("changedAt").asText()).toInstant()).isBetween(start,Instant.now().plusSeconds(1));
-  assertThat(db.queryForMap("select * from stay_records where id=?",s.path("id").asLong())).isEqualTo(before);
+  var after=db.queryForMap("select * from stay_records where id=?",s.path("id").asLong());
+  assertThat(after.get("version")).isEqualTo(((Number)before.get("version")).longValue()+1);
+  before.remove("version");before.remove("updated_at");after.remove("version");after.remove("updated_at");assertThat(after).isEqualTo(before);
   assertThat(db.queryForList("select * from stay_guests where stay_record_id=? order by position",s.path("id").asLong())).isEqualTo(guests);
   assertThat(db.queryForObject("select a.exited_at=b.entered_at and a.end_reason='ROOM_CHANGE' from stay_room_segments a,stay_room_segments b where a.id=? and b.id=?",Boolean.class,r.path("oldSegmentId").asLong(),r.path("newSegmentId").asLong())).isTrue();
   assertThat(db.queryForObject("select count(*) from stay_room_segments where stay_record_id=? and exited_at is null",Integer.class,s.path("id").asLong())).isEqualTo(1);

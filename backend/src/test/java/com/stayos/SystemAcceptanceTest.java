@@ -40,6 +40,8 @@ class SystemAcceptanceTest {
   db.execute("drop function if exists s8_fail_fn()");
   var guests=db.queryForList("select guest_id from stay_guests where stay_record_id in(select id from stay_records where created_by in("+OWN+"))",Long.class);
   db.update("delete from idempotency_requests where operator_id in("+OWN+")");
+  db.update("delete from guest_corrections where stay_record_id in(select id from stay_records where created_by in("+OWN+"))");
+  db.update("delete from stay_extensions where stay_record_id in(select id from stay_records where created_by in("+OWN+"))");
   db.update("delete from housekeeping_assignment_items where batch_id in(select id from housekeeping_assignment_batches where operator_id in("+OWN+"))");
   db.update("delete from housekeeping_assignment_batches where operator_id in("+OWN+")");
   db.update("delete from housekeeping_task_logs where task_id in(select id from housekeeping_tasks where created_by in("+OWN+"))");
@@ -239,17 +241,42 @@ class SystemAcceptanceTest {
  }
  Process child(String database,int childPort,String name) throws Exception {
   String cp=System.getProperty("surefire.test.class.path",System.getProperty("java.class.path"));
-  return new ProcessBuilder(java.nio.file.Path.of(System.getProperty("java.home"),"bin","java.exe").toString(),"-cp",cp,"com.stayos.StayosApplication","--spring.profiles.active=test","--spring.datasource.url=jdbc:postgresql://127.0.0.1:"+System.getenv().getOrDefault("STAYOS_TEST_DB_PORT","15433")+"/"+database+"?socketTimeout=3&connectTimeout=2","--server.port="+childPort,"--spring.datasource.hikari.connection-timeout=1500","--spring.datasource.hikari.validation-timeout=1000","--spring.datasource.hikari.connection-init-sql=SET statement_timeout = '2000ms'")
+  // Favor startup for this short-lived recovery probe; production and performance-test JVM defaults are unchanged.
+  return new ProcessBuilder(java.nio.file.Path.of(System.getProperty("java.home"),"bin","java.exe").toString(),"-XX:TieredStopAtLevel=1","-cp",cp,"com.stayos.StayosApplication","--spring.profiles.active=test","--spring.datasource.url=jdbc:postgresql://127.0.0.1:"+System.getenv().getOrDefault("STAYOS_TEST_DB_PORT","15433")+"/"+database+"?socketTimeout=3&connectTimeout=2","--server.port="+childPort,"--server.address=127.0.0.1","--spring.datasource.hikari.connection-timeout=1500","--spring.datasource.hikari.validation-timeout=1000","--spring.datasource.hikari.connection-init-sql=SET statement_timeout = '2000ms'","--logging.level.com.stayos.StayosApplication=INFO")
    .redirectErrorStream(true).redirectOutput(evidence(name+".log").toFile()).start();
  }
- void ready(Process p,int childPort) throws Exception {for(int i=0;i<100;i++){assertThat(p.isAlive()).as("Isolated application stopped").isTrue();try {if(new Browser(childPort).get("/api/health").statusCode()==200) return;}catch(Exception ignored){}Thread.sleep(200);}fail("Isolated application startup timeout");}
+ static void ready(Process p,int childPort) throws Exception {ready(p,childPort,Duration.ofSeconds(20));}
+ static void ready(Process p,int childPort,Duration budget) throws Exception {
+  assertThat(p.isAlive()).as("Isolated application stopped").isTrue();long deadline=System.nanoTime()+budget.toNanos();
+  try(var http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build()) {
+   Integer lastStatus=null;
+   while(System.nanoTime()<deadline) {
+    assertThat(p.isAlive()).as("Isolated application stopped").isTrue();
+    long remaining=deadline-System.nanoTime();if(remaining<=0) break;
+    var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+childPort+"/api/health/ready")).timeout(Duration.ofNanos(Math.min(remaining,TimeUnit.SECONDS.toNanos(1)))).GET().build();
+    try {lastStatus=http.send(request,HttpResponse.BodyHandlers.discarding()).statusCode();if(lastStatus==200) return;}catch(java.io.IOException ignored){}
+    TimeUnit.NANOSECONDS.sleep(Math.min(TimeUnit.MILLISECONDS.toNanos(200),Math.max(0,deadline-System.nanoTime())));
+   }
+   fail("Isolated application startup timeout after "+budget.toMillis()+"ms; last readiness status="+lastStatus);
+  }
+ }
  Browser childLogin(int childPort,String role) throws Exception {var b=new Browser(childPort);ok(b.post("/api/auth/login",Map.of("username","system_test_"+role.toLowerCase(Locale.ROOT),"password",password)));return b;}
  @Test void actualBackupRestoreKeyVerificationRestartOutageTimeoutAndCommitRollback() throws Exception {
   var f=flow();long active=room();var front=login("FRONT_DESK");String request=key();var input=new HashMap<String,Object>(inBody(active));input.put("guests",List.of(Map.of("name","虚构恢复主要住客","documentType","OTHER","documentNumber","S8-FICTIONAL-001","phone","13900000087","primary",true),Map.of("name","虚构恢复同行住客","documentType","OTHER","documentNumber","S8-FICTIONAL-002","phone","13900000088","primary",false)));var activeStay=ok(front.request("POST","/api/stays",input,request));
+  String extensionKey=key();var extensionInput=Map.of("segmentId",activeStay.path("segmentId").asLong(),"version",activeStay.path("version").asLong(),"newExpectedCheckOutAt",OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).toString(),"reason","虚构恢复续住记录");
+  var extensionReceipt=ok(front.request("POST","/api/stays/"+activeStay.path("id").asLong()+"/extensions",extensionInput,extensionKey));
+  String correctionKey=key();String correctionPath="/api/stays/"+activeStay.path("id").asLong()+"/guests/"+activeStay.path("guests").get(0).path("id").asLong()+"/corrections";
+  var correctionInput=Map.of("version",0,"changes",Map.of("name","虚构恢复更正住客","phone","13900000994"),"reason","虚构恢复更正记录");
+  var correctionReceipt=ok(front.request("POST",correctionPath,correctionInput,correctionKey));
   Map<String,String> before;try(var initialConnection=db.getDataSource().getConnection()){before=snapshot(initialConnection);}String database="stayos_restore_"+key().replace("-","");var scripts=java.nio.file.Path.of(System.getProperty("user.dir")).getParent().resolve("scripts");
   var backup=powerShell("backup","& "+quote(scripts.resolve("backup-database.ps1").toString())+" -Container stayos-postgres-test-1 -Database stayos_test -OutputDirectory "+quote(evidence("backups").toString())+" | ConvertTo-Json -Compress",true);
   var restore=powerShell("restore","& "+quote(scripts.resolve("restore-database.ps1").toString())+" -Container stayos-postgres-test-1 -Database "+database+" -ConfirmTarget "+database+" -BackupPath "+quote(backup.path("BackupPath").asText())+" | ConvertTo-Json -Compress",true);
   try(var c=restored(database)) {
+   try(var stmt=c.prepareStatement("select after_ciphertext from guest_corrections where id=?")) {
+    stmt.setLong(1,correctionReceipt.path("id").asLong());try(var r=stmt.executeQuery()) {
+     assertThat(r.next()).isTrue();assertThat(decrypt(r.getString(1),new byte[32],"guest-correction")).contains("13900000994","虚构恢复更正住客");
+    }
+   }
    assertThat(snapshot(c)).isEqualTo(before);
    try(var stmt=c.createStatement();var r=stmt.executeQuery("select document_ciphertext,encryption_key_id,phone_ciphertext from guests order by id desc limit 1")) {assertThat(r.next()).isTrue();String cipher=r.getString(1);assertThat(r.getString(2)).isEqualTo("v1");assertThat(decrypt(cipher,new byte[32])).isEqualTo("S8-FICTIONAL-002");assertThat(decrypt(r.getString(3),new byte[32],"phone")).isEqualTo("13900000088");byte[] wrong=new byte[32];wrong[0]=1;assertThatThrownBy(()->decrypt(cipher,wrong)).isInstanceOf(javax.crypto.AEADBadTagException.class);}
    try(var stmt=c.createStatement();var r=stmt.executeQuery("select count(*) from pg_constraint where contype in ('f','u','c')")){r.next();assertThat(r.getInt(1)).isGreaterThan(50);}
@@ -270,10 +297,20 @@ class SystemAcceptanceTest {
    app=child(database,childPort,"restore-first-start");ready(app,childPort);var session=childLogin(childPort,"FRONT_DESK");var restoredStay=ok(session.get("/api/stays/"+f.stay().path("id").asLong()));assertThat(restoredStay.path("roomChanges")).hasSize(1);assertThat(restoredStay.path("guests")).isEqualTo(f.stay().path("guests"));
    app.destroy();assertThat(app.waitFor(15,TimeUnit.SECONDS)).isTrue();app=child(database,childPort,"restore-second-start");ready(app,childPort);
    assertThat(session.get("/api/stays").statusCode()).isEqualTo(401);session=childLogin(childPort,"FRONT_DESK");assertThat(ok(session.request("POST","/api/stays",input,request)).path("id")).isEqualTo(activeStay.path("id"));
+   assertThat(ok(session.get("/api/stays/extensions/result/"+extensionKey))).isEqualTo(extensionReceipt);
+   assertThat(ok(session.request("POST","/api/stays/"+activeStay.path("id").asLong()+"/extensions",extensionInput,extensionKey))).isEqualTo(extensionReceipt);
+   assertThat(ok(session.get("/api/stays/"+activeStay.path("id").asLong()+"/extensions")).path("total").asInt()).isEqualTo(1);
+   assertThat(ok(session.get("/api/stays/guest-corrections/result/"+correctionKey))).isEqualTo(correctionReceipt);
+   assertThat(ok(session.request("POST",correctionPath,correctionInput,correctionKey))).isEqualTo(correctionReceipt);
+   assertThat(ok(session.get(correctionPath)).path("total").asInt()).isEqualTo(1);
    // Only the isolated test database container is paused; development PostgreSQL remains running.
    assertThat(docker("pause","stayos-postgres-test-1")).isZero();paused=true;var unavailable=session.get("/api/room-status");assertThat(unavailable.statusCode()).isEqualTo(503);assertThat(unavailable.body()).doesNotContain("jdbc:","Exception","password","SQL");
+   assertThat(session.get("/api/health/ready").statusCode()).isEqualTo(503);
+   assertThat(session.post("/api/auth/logout",null).statusCode()).isEqualTo(200);
    assertThat(docker("unpause","stayos-postgres-test-1")).isZero();paused=false;
-   boolean recovered=false;for(int i=0;i<30;i++) {try {if(session.get("/api/room-status").statusCode()==200){recovered=true;break;}}catch(Exception ignored){}Thread.sleep(200);}assertThat(recovered).isTrue();
+   assertThat(session.get("/api/auth/me").statusCode()).isEqualTo(401);
+   boolean recovered=false;for(int i=0;i<30;i++) {try {if(session.get("/api/health/ready").statusCode()==200){recovered=true;break;}}catch(Exception ignored){}Thread.sleep(200);}assertThat(recovered).isTrue();
+   session=childLogin(childPort,"FRONT_DESK");assertThat(session.get("/api/room-status").statusCode()).isEqualTo(200);
    // Block one room so the child's server-side statement timeout rejects the write atomically.
    try(var lock=restored(database)) {lock.setAutoCommit(false);try(var s=lock.prepareStatement("select id from rooms where id=? for update")){s.setLong(1,active);s.executeQuery().close();}
     var out=session.post("/api/stays/"+activeStay.path("id").asLong()+"/check-out",Map.of("segmentId",activeStay.path("segmentId").asLong()));assertThat(out.statusCode()).isEqualTo(503);assertThat(out.body()).doesNotContain("SQL","Exception");lock.rollback();}

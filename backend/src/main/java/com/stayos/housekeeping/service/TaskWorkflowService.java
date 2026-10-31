@@ -16,8 +16,9 @@ public class TaskWorkflowService {
     private final TaskAccess access;
     private final IdempotencyService requests;
     private final AuditService audit;
-    public TaskWorkflowService(TaskMapper mapper,RoomMapper rooms,TaskAccess access,IdempotencyService requests,AuditService audit) {
-        this.mapper=mapper;this.rooms=rooms;this.access=access;this.requests=requests;this.audit=audit;
+    private final com.stayos.auth.BusinessActorGuard actors;
+    public TaskWorkflowService(TaskMapper mapper,RoomMapper rooms,TaskAccess access,IdempotencyService requests,AuditService audit,com.stayos.auth.BusinessActorGuard actors) {
+        this.mapper=mapper;this.rooms=rooms;this.access=access;this.requests=requests;this.audit=audit;this.actors=actors;
     }
     private ApiException conflict(String message) { return new ApiException(409,"TASK_CONFLICT",message); }
     String text(String value,boolean required) {
@@ -32,7 +33,7 @@ public class TaskWorkflowService {
     void lockEmployees(long actor,Long target,String permission) {
         var ids=new TreeSet<Long>();ids.add(actor);if(target!=null) ids.add(target);
         for(long id:ids) if(mapper.lockEmployee(id)==null) throw conflict("员工账号不存在或已禁用，请刷新后重新选择");
-        access.require(actor,permission);
+        actors.require(actor,permission);
         if(target!=null && !access.permissions(target).contains("housekeeping:execute")) throw conflict("所选员工没有清洁执行权限");
     }
     TaskLog saveLog(TaskView t,long actor,String action,String before,Long former,String reason,OffsetDateTime now) {

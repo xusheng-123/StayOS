@@ -16,8 +16,9 @@ public class CheckoutService {
     private final IdempotencyService requests;
     private final AuditService audit;
     private final TaskCreationService tasks;
-    public CheckoutService(CheckoutMapper mapper,RoomMapper rooms,IdempotencyService requests,AuditService audit,TaskCreationService tasks) {
-        this.mapper=mapper;this.rooms=rooms;this.requests=requests;this.audit=audit;this.tasks=tasks;
+    private final com.stayos.auth.BusinessActorGuard actors;
+    public CheckoutService(CheckoutMapper mapper,RoomMapper rooms,IdempotencyService requests,AuditService audit,TaskCreationService tasks,com.stayos.auth.BusinessActorGuard actors) {
+        this.mapper=mapper;this.rooms=rooms;this.requests=requests;this.audit=audit;this.tasks=tasks;this.actors=actors;
     }
     private ApiException conflict(String code,String message) { return new ApiException(409,code,message); }
     private record Canonical(long stayId,long segmentId) {}
@@ -26,8 +27,9 @@ public class CheckoutService {
         if(id<1 || input==null || input.segmentId()==null || input.segmentId()<1)
             throw new ApiException(400,"VALIDATION_ERROR","请提供有效的入住记录和当前房间使用段");
         Long previous=requests.reserve(actor,"CHECK_OUT",key,new Canonical(id,input.segmentId()));
+        actors.require(actor,"stay:manage");
         if(previous!=null) return requiredResult(previous);
-        // All existing-stay operations: request reservation -> stay -> rooms (ascending) -> segments.
+        // request reservation -> actor(shared) -> stay -> rooms(ascending) -> segments.
         var stay=mapper.lockStay(id);
         if(stay==null) throw new ApiException(404,"STAY_NOT_FOUND","入住记录不存在");
         if(!stay.status.equals("IN_HOUSE")) throw conflict("STAY_ALREADY_CHECKED_OUT","这笔入住已结束，请查看历史记录");

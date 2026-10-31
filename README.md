@@ -1,8 +1,14 @@
-# StayOS V1.0
+# StayOS V1.2
 
-StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统。第 1 阶段认证工程已完成并通过本地测试，已初始化 Git 和独立 Docker 开发/测试数据库；实现及测试记录见 docs/AUTHENTICATION.md 和 docs/PHASE1-DELIVERY.md。`docs/` 包含四份基础设计文档，以及认证说明和交付记录，本 README 位于项目根目录。文档可随业务需要调整，但相关说明必须同步。
+V1.2 已完成住客资料受控更正：入口为入住详情 → 本次实际住客 → 更正住客资料。2026-10-31 最终同批 **356 项 JUnit、153 项真实浏览器全部通过**，前后端构建与打包通过。支持版本冲突保护、加密更正历史、安全重试及岗位审计；V14 仅在隔离测试和旧版升级场景验证，未部署或升级开发/生产库。详见 [V1.2 交付记录](docs/releases/V1.2-DELIVERY.md)。
+
+V1.1 已完成续住与预计离店调整：在入住详情点击“办理续住”，支持原入住下调整计划、原因及历史、版本冲突保护和安全重试。2026-10-31 最终同批验收 **316 项 JUnit、141 项真实浏览器全部通过**，前后端构建通过；详见 [V1.1 交付记录](docs/releases/V1.1-DELIVERY.md)。V13 已在隔离测试库及旧版升级场景验证，本轮没有直接升级开发/生产库或部署。以下 V1.0 验收数量保留为历史基线。
+
+StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统。V1.0 核心业务及本次安全与运营加固已通过 2026-10-31 第五批本地完整验收：284 项 JUnit、130 项真实浏览器测试全部通过，前后端构建通过；证据见 [V1-CLOSURE.md](docs/V1-CLOSURE.md)。真实上线仍需完成 [发布清单](docs/V1-RELEASE-CHECKLIST.md) 的目标环境和酒店现场准备。认证及各阶段交付记录属于历史记录，不能代替当前工作树的验证。`docs/` 包含四份基础设计文档、业务规则及交付记录，本 README 位于项目根目录。文档可随业务需要调整，但相关说明必须同步。
 
 ## 四份文档分别做什么？
+
+后续智能体开发统一先读 [多智能体连续开发执行手册](docs/AGENT-IMPLEMENTATION-GUIDE.md)：其中规定产品版本顺序、技术/界面规范、逐版实现契约、测试验收、分工、进度与中断恢复。根目录 [AGENTS.md](AGENTS.md) 提供自动发现入口；产品取舍与对比见 [分版本路线图](docs/VERSION-ROADMAP.md)。
 
 1. [PRD.md — 产品需求文档](docs/PRD.md)：说明用户、范围、业务流程、权限及验收标准。
 2. [DATABASE.md — 数据库设计草案](docs/DATABASE.md)：说明数据表、关联关系、约束、事务及并发规则。
@@ -45,9 +51,15 @@ StayOS 是采用模块化单体架构的酒店前台与客房协同管理系统�
 
 ## 本地启动（Windows）
 
-需要 Docker Desktop（Linux 容器模式）、Java 21、Maven 3.9、Node.js 20.19+ 或 22.12+、Git。当前机器使用已安装的 Node.js 24，以及 `LocalAppData/StayOS/tools` 中的便携 Java/Maven；脚本会优先使用这套便携工具，不修改系统环境变量。
+需要 Docker Desktop（Linux 容器模式）、Java 21、Maven 3.9、PowerShell 7（`pwsh`，不是 Windows PowerShell 5.1）、Node.js 20.19+ 或 22.12+、Git。当前机器已安装 Node.js 24；本次用户目录工具准备及自动发现已验证，版本为 Temurin 21.0.13+9、Maven 3.9.16、PowerShell 7.6.9，目录分别为 `%LOCALAPPDATA%/StayOS/tools/java-21`、`%LOCALAPPDATA%/StayOS/tools/maven`、`%LOCALAPPDATA%/StayOS/tools/powershell-7`。`scripts/env.ps1` 在当前进程内自动发现这些便携工具，并保留旧版 `jdk-21.0.12.1+1`、`apache-maven-3.9.16` 目录作为 fallback，未修改系统全局环境。2026-10-31 第五批未过滤完整回归及打包通过，本地收口完成；本轮具体证据见 [V1-CLOSURE.md](docs/V1-CLOSURE.md)。
 
-在 `E:\StayOS` 的 PowerShell 终端执行。首次配置 `.env` 已在当前机器完成，**已有 `.env` 时跳过初始化命令，不覆盖数据库密码**。
+如果 `pwsh` 尚未在全局 PATH 中，可从现有 PowerShell 终端启动已准备好的便携版本（不改全局配置）：
+
+```powershell
+& "$env:LOCALAPPDATA\StayOS\tools\powershell-7\pwsh.exe" -NoLogo -NoProfile
+```
+
+以下命令在 `E:\StayOS` 的 PowerShell 7 终端执行。首次配置 `.env` 已在当前机器完成，**已有 `.env` 时跳过初始化命令，不覆盖数据库密码**。
 
 ```powershell
 # 仅全新环境执行一次；生成随机数据库密码，不创建任何默认管理员。
@@ -83,7 +95,9 @@ mvn -f backend/pom.xml -DskipTests package
 
 开发数据库仅监听 `127.0.0.1:15432`；测试库监听 `127.0.0.1:15433`，使用独立临时数据目录。Compose 项目名为 `stayos`，开发卷为 `stayos_pgdata`，不会使用其他项目的容器或数据卷。开发库不会自动插入测试员工。
 
-账号维护接口已经实现，账号管理表单留作后续界面工作；管理员现已可维护房型和房间。创建员工、分配角色等接口见 API 第 4、11 节。浏览器自动化测试临时创建五角色、多角色账号和房间夹具，结束后清理，不在源码内提供固定演示密码。
+管理员可在 `/manage/accounts` 新增员工、按账号或姓名搜索、调整角色、启用/禁用及重置密码；也可维护房型和房间。创建员工、分配角色等接口见 API 第 4、11 节。浏览器自动化测试临时创建五角色、多角色账号和房间夹具，结束后清理，不在源码内提供固定演示密码。
+
+业务岗位可从页面顶部进入 `/operations`，按岗位查看超预计退房、严重异常、清洁滞留和需接管任务。房态图及待办在活跃页面定时重新查询，闲置时暂停。安全修复、受限运行账号、备份任务和诊断操作见 [运营加固说明](docs/OPERATIONS-HARDENING.md)。正式生产部署及离机备份仍需落实。
 
 ## 运行测试
 
@@ -97,7 +111,9 @@ cd ..
 .\scripts\test.ps1 -Browser
 ```
 
-普通测试命令会明确跳过浏览器测试入口；加 `-Browser` 时全部执行。测试只写 `stayos_test`，不会清空开发库。浏览器测试的随机密码仅通过子进程环境传递，不写入源码或测试报告。报告在 `backend/target/surefire-reports` 和 `.local/playwright-results.json`。
+普通测试命令会跳过浏览器联调；`-Browser` 通过 Maven/JUnit 测试入口准备和清理浏览器夹具。**不能脱离该入口直接运行前端全量 `npm run test:e2e`，该套件依赖 JUnit 夹具。** 浏览器测试的随机密码仅通过子进程环境传递，不写入源码或测试报告。报告在 `backend/target/surefire-reports` 和 `.local/playwright-results.json`。
+
+数据库测试只操作 Compose 的 `postgres-test` 测试容器（`stayos-postgres-test-1`）中的 `stayos_test` 及 `stayos_restore_` 前缀隔离库；脚本仅以 `up -d --wait --no-deps postgres-test` 启动该测试服务，不启动或重建开发数据库服务，不清空开发库。故障用例会暂停该测试容器，同容器内其他隔离库也会暂时不可用，因此测试需独占该测试容器，不与其他测试或恢复演练并行。
 
 房间浏览器测试另存 `.local/playwright-rooms-results.json` 与 `.local/room-browser-run.log`；认证浏览器测试仍保存原来的报告路径。房间接口、统计口径、已确认规则及后续视图扩展要求见 ROOMS.md。
 
@@ -106,7 +122,7 @@ cd ..
 ## 给初学者的提示
 
 - 你不需要先把每个技术词都学会才能读这些文档。每份文档中都加入了“注释”和术语解释。
-- 文档中的表名、字段、接口路径和示例数据都是建议草案，开发前可以结合真实酒店业务调整。
+- 基础设计草案用于理解原始规划；已实现的表、字段、接口和业务约定以当前实现及对应阶段说明为准，不应笼统视为可任意修改的草案。变更须先确认规则并同步实现与文档，示例数据不代表真实业务数据。
 - 所有示例客人和号码都应当视为虚构数据；不要将真实客人的证件信息放进开发文档或代码仓库。
 - 在真实酒店使用之前，必须完成测试、安全检查、备份恢复验证，并确认酒店实际操作流程。
 
@@ -116,4 +132,4 @@ cd ..
 
 复用现有审计表新增只读[操作记录](http://127.0.0.1:5173/audit-logs)页面。管理员查看账号、安全及基础配置审计；总经理查看酒店业务审计；客房主管仅查看清洁、异常和维修审计。前台及普通服务员继续使用原业务历史，角色操作权限没有扩张。
 
-备份和隔离恢复操作见 [BACKUP-RECOVERY.md](docs/BACKUP-RECOVERY.md)；正式试运行前逐项检查 [V1-RELEASE-CHECKLIST.md](docs/V1-RELEASE-CHECKLIST.md)。实际测试、故障恢复及性能数据见 [PHASE8-DELIVERY.md](PHASE8-DELIVERY.md)。开发环境验收通过不代表可以直接上线处理真实住客资料。
+备份和隔离恢复操作见 [BACKUP-RECOVERY.md](docs/BACKUP-RECOVERY.md)；正式试运行前逐项检查 [V1-RELEASE-CHECKLIST.md](docs/V1-RELEASE-CHECKLIST.md)。第八阶段历史测试、故障恢复及性能数据见 [PHASE8-DELIVERY.md](PHASE8-DELIVERY.md)，不代表本次验证结果。开发环境验收通过不代表可以直接上线处理真实住客资料。

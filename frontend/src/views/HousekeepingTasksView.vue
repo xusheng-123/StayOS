@@ -4,11 +4,13 @@ import { ElTable, ElTableColumn, ElPagination, ElSelect, ElOption, ElDrawer, ElD
 import { api, ApiError } from '../api/client'
 import { localTime, floorName } from '../api/rooms'
 import { auth, can } from '../stores/auth'
+import { useRoute } from 'vue-router'
 import type { PageResult, Room } from '../types/room'
 import type { HousekeepingTask, TaskLog, TaskStatus, TaskStatistics, Employee } from '../types/housekeeping'
 const names: Record<TaskStatus, string> = { PENDING: '待处理', IN_PROGRESS: '正在打扫', COMPLETED: '已完成' }
 const actions: Record<string, string> = { MANUAL_CREATE: '人工创建', AUTO_CREATE: '自动创建', CLAIM: '领取任务', ASSIGN: '分配任务', REASSIGN: '重新分配', START: '开始打扫', COMPLETE: '完成清洁' }
 const manage = computed(() => can('housekeeping:manage'))
+const route = useRoute()
 const roomNumber = ref(''), floor = ref<number>(), status = ref<TaskStatus | ''>('PENDING'), scope = ref('ALL'), sort = ref('NEWEST'), assignee = ref<number>()
 const floors = ref<{ floor: number; roomCount: number }[]>([]), employees = ref<Employee[]>([]), assigneeOptions = ref<Employee[]>([])
 const page = ref(1), loading = ref(false), error = ref(''), success = ref(''), result = ref<PageResult<HousekeepingTask> | null>(null), stats = ref<TaskStatistics | null>(null)
@@ -121,6 +123,8 @@ async function endRetry() {
 function reset() { roomNumber.value = ''; floor.value = undefined; status.value = 'PENDING'; scope.value = 'ALL'; assignee.value = undefined; sort.value = 'NEWEST'; void load(true) }
 onMounted(async () => {
   restoreMarker(); void load()
+  const taskId = Number(route.query.taskId)
+  if (Number.isSafeInteger(taskId) && taskId > 0) void show(taskId)
   try { floors.value = await api<{ floor: number; roomCount: number }[]>('/api/floors'); if (manage.value) { [employees.value, assigneeOptions.value] = await Promise.all([api<Employee[]>('/api/housekeeping-tasks/employees'), api<Employee[]>('/api/housekeeping-tasks/assignees')]) } }
   catch (cause) { error.value = message(cause) }
 })

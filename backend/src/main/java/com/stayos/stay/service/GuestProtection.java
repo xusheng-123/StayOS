@@ -15,14 +15,35 @@ public class GuestProtection {
     private final SecretKeySpec key;
     private final byte[] hashKey;
     private final SecureRandom random=new SecureRandom();
-    public GuestProtection(@Value("${stayos.guests.encryption-key:}") String encoded) {
+    private final String keyFingerprint;
+    public GuestProtection(String encoded) { this(encoded,""); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public GuestProtection(@Value("${stayos.guests.encryption-key:}") String encoded,@Value("${stayos.guests.key-fingerprint:}") String expectedFingerprint) {
         try {
             byte[] bytes=Base64.getDecoder().decode(encoded);
             if(bytes.length!=32) throw new IllegalArgumentException();
+            keyFingerprint=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+            if(!expectedFingerprint.isBlank() && !MessageDigest.isEqual(keyFingerprint.getBytes(StandardCharsets.US_ASCII),expectedFingerprint.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.US_ASCII)))
+                throw new IllegalArgumentException();
             key=new SecretKeySpec(bytes,"AES");
             Mac derivation=Mac.getInstance("HmacSHA256"); derivation.init(new SecretKeySpec(bytes,"HmacSHA256"));
             hashKey=derivation.doFinal("StayOS/check-in/request-hash/v1".getBytes(StandardCharsets.UTF_8));
-        } catch(Exception ignored) { throw new IllegalStateException("Configure a private 32-byte Base64 STAYOS_GUEST_ENCRYPTION_KEY; see scripts/init-guest-key.ps1"); }
+        } catch(Exception ignored) { throw new IllegalStateException("Guest encryption key is missing, invalid, or does not match its expected fingerprint; see scripts/init-guest-key.ps1"); }
+    }
+    public String keyFingerprint() { return keyFingerprint; }
+    // Internal comparison/history only. No controller or response DTO exposes decrypted values.
+    String decrypt(String value,String field) {
+        if(value==null) return "";
+        try {
+            String[] parts=value.split("\\.");
+            if(parts.length!=3 || !KEY_ID.equals(parts[0])) throw new GeneralSecurityException();
+            Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE,key,new GCMParameterSpec(128,Base64.getDecoder().decode(parts[1])));
+            cipher.updateAAD(("StayOS/"+KEY_ID+"/"+field).getBytes(StandardCharsets.UTF_8));
+            return new String(cipher.doFinal(Base64.getDecoder().decode(parts[2])),StandardCharsets.UTF_8);
+        } catch(GeneralSecurityException | IllegalArgumentException ignored) {
+            throw new ApiException(500,"PROTECTION_ERROR","住客资料保护校验失败，请联系管理员");
+        }
     }
     public String encrypt(String value,String field) {
         if(value.isEmpty()) return null;

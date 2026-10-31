@@ -7,6 +7,7 @@ import { availabilityNames, cleaningNames, floorName, roomOptions, roomQuery } f
 import type { RoomBoard, RoomFilters as Filters, RoomType, Floor, RoomStatistics } from '../types/room'
 import RoomFilters from '../components/RoomFilters.vue'
 import RoomDetail from '../components/RoomDetail.vue'
+import { useLiveRefresh } from '../composables/useLiveRefresh'
 
 const filters = ref<Filters>({ roomNumber: '' }), page = ref(1)
 const types = ref<RoomType[]>([]), floors = ref<Floor[]>([]), board = ref<RoomBoard | null>(null)
@@ -18,6 +19,7 @@ const metrics: { key: keyof RoomStatistics; label: string; state: string }[] = [
   { key: 'outOfService', label: '维修停用', state: 'OUT_OF_SERVICE' }, { key: 'disabled', label: '档案停用', state: 'DISABLED' },
 ]
 let generation = 0
+const { stale, fresh } = useLiveRefresh(load, () => !loading.value)
 async function load() {
   const current = ++generation
   loading.value = true; error.value = ''
@@ -25,6 +27,7 @@ async function load() {
     const result = await api<RoomBoard>(`/api/room-status?${roomQuery(filters.value, page.value, 24)}`)
     if (current === generation) {
       board.value = result
+      fresh()
       updated.value = new Date().toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
     }
   } catch (cause) { if (current === generation) { error.value = cause instanceof Error ? cause.message : '房态加载失败'; board.value = null } }
@@ -44,6 +47,7 @@ onMounted(refresh)
   <section class="rooms-page">
     <div class="page-heading"><div><p class="eyebrow muted">ROOM OVERVIEW</p><h1>房态图</h1><p class="subtle">前台与客房部，共享同一份房间信息。</p></div><div class="heading-actions"><router-link v-if="can('room:manage')" to="/manage/rooms"><el-button>管理房间</el-button></router-link><el-button :loading="loading" @click="refresh">刷新房态</el-button></div></div>
     <RoomFilters v-model="filters" :types="types" :floors="floors" :loading="loading" @search="search" @reset="reset" />
+    <p class="subtle">操作期间每 30 秒更新；切回页面时重新查询。无操作 1 分钟后暂停自动更新。<strong v-if="stale">房态可能已过期，请刷新后确认。</strong></p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon /><el-button v-if="error" class="retry-button" @click="refresh">重试</el-button>
     <div v-loading="loading" class="board-content">
       <div class="room-statistics" aria-label="房态统计"><div v-for="item in metrics" :key="item.key" :class="['room-metric', 'state-' + item.state]"><span>{{ item.label }}</span><strong :data-testid="'stat-' + item.key">{{ board?.statistics[item.key] ?? '—' }}</strong></div></div>

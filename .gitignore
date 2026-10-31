@@ -9,6 +9,7 @@ frontend/test-results/
 frontend/playwright-report/
 .idea/
 .vscode/
+.zcode/
 *.log
 *.iml
 /测试账号.md

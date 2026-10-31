@@ -8,7 +8,7 @@ import { localTime, floorName } from '../api/rooms'
 import type { Room, Floor, PageResult } from '../types/room'
 import { issueTypes, issueStates, severities, issueActions, type RoomIssue, type IssueLog, type MaintenanceStop } from '../types/issue'
 const route = useRoute(), manage = computed(() => can('issue:resolve'))
-const filters = ref({ roomNumber:'', floor:'', issueType:'', severity:'', status:'' }), page = ref(1)
+const filters = ref({ roomNumber: typeof route.query.roomNumber === 'string' ? route.query.roomNumber.slice(0,20) : '', floor:'', issueType:'', severity:'', status:'' }), page = ref(1)
 const selectedRoomFilter = ref(Number(route.query.roomId) || undefined)
 const floors = ref<Floor[]>([]), result = ref<PageResult<RoomIssue>>(), stats = ref<{open:number; inProgress:number; critical:number; maintenanceRooms:number}>()
 const loading = ref(false), error = ref(''), success = ref('')

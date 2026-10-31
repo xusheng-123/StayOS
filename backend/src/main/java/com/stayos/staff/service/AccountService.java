@@ -19,10 +19,18 @@ public class AccountService {
     public AccountService(UserMapper users, PasswordEncoder passwords, AuditService audit) { this.users = users; this.passwords = passwords; this.audit = audit; }
 
     public record Page(List<UserView> items, long total, int page, int pageSize) {}
-    public Page list(int page, int pageSize) {
+    public Page list(int page, int pageSize) { return list(page,pageSize,""); }
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public Page list(int page, int pageSize,String search) {
         if (page < 1 || pageSize < 1 || pageSize > 100 || page > 100000) throw new ApiException(400, "VALIDATION_ERROR", "分页参数不正确");
-        var query = new QueryWrapper<UserAccount>().orderByAsc("id").last("LIMIT " + pageSize + " OFFSET " + ((long)(page - 1) * pageSize));
-        return new Page(users.selectList(query).stream().map(u -> UserView.of(u, users.roles(u.id))).toList(), users.selectCount(null), page, pageSize);
+        if(search==null || search.length()>100)throw new ApiException(400,"VALIDATION_ERROR","账号搜索内容不能超过 100 字");
+        var query = accountQuery(search).orderByAsc("id").last("LIMIT " + pageSize + " OFFSET " + ((long)(page - 1) * pageSize));
+        return new Page(users.selectList(query).stream().map(u -> UserView.of(u, users.roles(u.id))).toList(), users.selectCount(accountQuery(search)), page, pageSize);
+    }
+    private QueryWrapper<UserAccount> accountQuery(String search) {
+        var q=new QueryWrapper<UserAccount>();String value=search.trim();
+        if(!value.isEmpty())q.and(w->w.like("username",value.toLowerCase(Locale.ROOT)).or().like("display_name",value));
+        return q;
     }
     private void validateRoles(Set<String> roles) {
         if (roles == null || roles.isEmpty() || !RolePermissions.ROLES.containsAll(roles)) throw new ApiException(400, "VALIDATION_ERROR", "请选择有效的系统角色");

@@ -12,6 +12,8 @@ public interface UserMapper extends BaseMapper<UserAccount> {
     UserAccount lockByUsername(String username);
     @Select("select * from users where id=#{id} for update")
     UserAccount lockById(long id);
+    @Select("select * from users where id=#{id} for share")
+    UserAccount lockForBusiness(long id);
     @Select("select r.role_code from roles r join user_roles ur on ur.role_id=r.id where ur.user_id=#{id} order by r.role_code")
     List<String> roles(long id);
     @Update("update users set failed_login_attempts=#{attempts}, locked_until=#{until} where id=#{id}")

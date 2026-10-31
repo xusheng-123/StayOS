@@ -19,6 +19,8 @@ const router = createRouter({
       { path: 'housekeeping/assignment', component: () => import('../views/HousekeepingAssignmentView.vue'), meta: { permission: 'housekeeping:manage' } },
       { path: 'housekeeping/tasks', component: () => import('../views/HousekeepingTasksView.vue'), meta: { permission: 'housekeeping:read' } },
       { path: 'manage/rooms', component: () => import('../views/RoomManageView.vue'), meta: { permission: 'room:manage' } },
+      { path: 'manage/accounts', component: () => import('../views/AccountManageView.vue'), meta: { permission: 'system:manage' } },
+      { path: 'operations', component: () => import('../views/OperationsView.vue'), meta: { anyPermissions: ['stay:manage', 'housekeeping:read', 'issue:report'] } },
       { path: 'manage/room-types', component: () => import('../views/RoomTypeManageView.vue'), meta: { permission: 'room:manage' } },
       { path: 'forbidden', component: () => import('../views/ForbiddenView.vue') },
     ] },

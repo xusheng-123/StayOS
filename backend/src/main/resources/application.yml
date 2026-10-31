@@ -5,6 +5,14 @@ spring:
     url: jdbc:postgresql://127.0.0.1:${STAYOS_DB_PORT:15432}/${STAYOS_DB_NAME:stayos}
     username: ${STAYOS_DB_USER:stayos}
     password: ${STAYOS_DB_PASSWORD}
+    hikari:
+      connection-timeout: 3000
+      validation-timeout: 1000
+      data-source-properties:
+        connectTimeout: 3
+        socketTimeout: 10
+        cancelSignalTimeout: 2
+        tcpKeepAlive: true
   flyway:
     clean-disabled: true
   jackson:
@@ -34,8 +42,13 @@ mybatis-plus:
 stayos:
   guests:
     encryption-key: ${STAYOS_GUEST_ENCRYPTION_KEY:}
+    key-fingerprint: ${STAYOS_GUEST_KEY_FINGERPRINT:}
   auth:
     max-failures: 5
     lock-duration: 15m
     ip-limit: 60
     ip-window: 1m
+    trusted-proxies: ${STAYOS_TRUSTED_PROXIES:}
+  operations:
+    pending-warning: 4h
+    cleaning-warning: 2h
