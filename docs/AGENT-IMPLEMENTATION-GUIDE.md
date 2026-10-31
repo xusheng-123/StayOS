@@ -587,7 +587,7 @@ git diff --check
 
 ### 2026-10-31：V1.3 非财务交班与按需打印完成并提交 Git
 
-- 经用户授权"现在按照开发手册去做V1.3"，按第 9 节完成全部阶段并本地提交（仅提交不推送）。迁移 V15 新增 `shift_handovers/handover_items/handover_events`，幂等表扩 `result_handover_id` 与三个 HANDOVER 操作；受限运行角色补三表 INSERT 与 shift_handovers UPDATE；`/api/handovers/**` 显式放行；权限 `handover:front-desk`（前台、总经理）、`handover:housekeeping`（客房主管、总经理）。
+- 经用户授权"现在按照开发手册去做V1.3"，按第 9 节完成全部阶段并本地提交；同日经用户单独授权，将 master（含 V1.0 以来全部本地提交）推送至远程 `github.com/xusheng-123/StayOS`。迁移 V15 新增 `shift_handovers/handover_items/handover_events`，幂等表扩 `result_handover_id` 与三个 HANDOVER 操作；受限运行角色补三表 INSERT 与 shift_handovers UPDATE；`/api/handovers/**` 显式放行；权限 `handover:front-desk`（前台、总经理）、`handover:housekeeping`（客房主管、总经理）。
 - 交付内容：创建→提交（冻结快照+重验接班人）→确认（仅接班人本人）→改派（仅 SUBMITTED、需原因）全状态机，数据库触发器强制不可变规则；前端列表/详情/表单、受控打印视图（重新校验后 `@media print` 仅输出交接单）、导航 17 交接班、运营页入口、操作记录交接班组。
 - 关键修复（实测发现）：带 JOIN 的 `FOR UPDATE OF h` 锁读在并发更新后经 EvalPlanQual 重查会跳过 join 键被改掉的行并返回 0 行，导致确认方 NPE 500；已改为单表主键锁 + "先版本后身份"校验（输方 409 STALE_VERSION），并发用例连续 12 次全绿。诊断用的 psql 实验数据曾污染测试库并使 r2 出现 2 个假失败，已清库并在 r3 消除；教训：在测试库手工实验后必须清理自建数据，测试清理按归属用户过滤不会替你兜底。
 - 有效验收证据：`.local/releases/V1.3/20261031-145951/`（r3：JUnit 386、0 失败/0 错误/0 跳过；交班浏览器 8 项 0 flaky；package/diff-check 退出码 0）；失败批次 r1/r2 原样保留于同目录。迁移计数断言已随 V15 更新（StayExtension 3、GuestCorrection 2、Housekeeping 7、备份恢复链 15）。当前最高迁移 V15，下一号 V16。
