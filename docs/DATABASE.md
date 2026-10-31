@@ -392,3 +392,18 @@ V1.3 当时漏登记本文件，这里补记；完整不变式见 [V1.3 交付�
 幂等扩展：`idempotency_requests` 增加 `result_folio_id/result_folio_charge_id/result_service_order_id/result_payment_record_id` 与 FOLIO_OPEN/FOLIO_CLOSE/FOLIO_REOPEN/CHARGE_POST/CHARGE_ADJUST/PAYMENT_RECEIVE/PAYMENT_REFUND/SERVICE_ORDER_CREATE/SERVICE_ORDER_UPDATE/SERVICE_ORDER_FULFILL/SERVICE_ORDER_CANCEL 操作；CHECK 约束按结果类型互斥（预约时允许结果列为空，与 V15 模式一致）。`deploy/runtime-grants.sql` 为受限运行角色补账务表 INSERT 与配置表 UPDATE，费用/流水/事件仍无 UPDATE/DELETE 权限。
 
 当前最高迁移 **V16**，下一号 V17。迁移计数断言已更新：HandoverSchemaTest 期望 2 个新迁移（V15+V16）。
+
+## V2.1 / V17 增量：收银交班、营业日与经营报表
+
+`V17__cashier_business_days.sql` 按开发手册第 12 节建收银与营业日底座。与 V1.3 `shift_handovers`（非财务事项交班）完全独立；金额口径沿用 V16（正数 `NUMERIC(18,2)` + 方向单独存列，预期/差异可为负）；**任何收银表不复制住客身份资料**。
+
+- `business_days`：显式营业日登记表，`business_date` 唯一；行随业务惰性创建并固定当时生效政策（`policy_id`），之后政策改版不影响该日归日口径；状态 OPEN/CLOSED，`CLOSED` 不可重开（触发器 `prevent_business_day_resurrection`），关账人/关账时间与状态一致性 CHECK。
+- `cashier_shifts`：收银班次 `OPEN → SUBMITTED → CONFIRMED`，触发器白名单单向迁移，CONFIRMED 不可变；期初备用金 `opened_float>=0`、期末实盘 `counted_cash>=0`；状态与时间戳/实盘字段一致性 CHECK（实盘值只能在提交时写入）；偏导唯一索引 `uq_cashier_shift_open` 保证一个收银员同时只有一个进行中班次。
+- `cash_counts`：提交班次时的一次性实盘记录，`difference=counted_cash-expected_cash` 由 CHECK 固化，差异非零必须带原因；表级只追加（UPDATE/DELETE 一律拒绝）。
+- `daily_close_runs`：人工关账批次 `RUNNING → COMPLETED/FAILED`；偏导唯一索引 `uq_daily_close_running` 保证每个营业日同时只有一个 RUNNING 批次（**单实例靠数据库锁，不靠 JVM 静态锁**）；`steps_done 0-4` 与 `last_step` 记录可恢复进度，失败原因留痕（≤1000 字）；触发器允许 RUNNING 期间进度更新，终态不可变、不可删除。
+- `daily_reports`：关账成功时固化的 JSONB 快照，`business_date` 唯一（一营业日一份），只追加；快照含费用/资金/出租分母、数据不足标记、当期调整追溯与口径说明。
+- `payment_records` 增加 `cashier_shift_id`（收款入账时点按收款人的进行中班次归属，事后不回改；部分索引仅覆盖非空行）。
+- 幂等扩展：`idempotency_requests` 增加 `result_cashier_shift_id` 与 CASHIER_SHIFT_OPEN/SUBMIT/CONFIRM 操作；结果列互斥 CHECK 以子串包裹方式扩展。
+- `deploy/runtime-grants.sql`：受限运行角色补 5 张新表 INSERT 与 business_days/cashier_shifts/daily_close_runs UPDATE；`cash_counts/daily_reports` 仍无 UPDATE/DELETE 权限。
+
+当前最高迁移 **V17**，下一号 V18。迁移计数断言已更新：BillingSchemaTest 2（V16+V17）、StayExtensionSchemaTest 5、GuestCorrectionSchemaTest 4、HandoverSchemaTest 3、HousekeepingSchemaTest 9、CashierSchemaTest 1（升级自 V16 场景）。

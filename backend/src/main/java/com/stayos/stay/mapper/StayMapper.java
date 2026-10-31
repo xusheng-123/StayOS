@@ -13,9 +13,9 @@ public interface StayMapper {
         on conflict(operator_id,operation,request_key) do nothing
         """)
     int reserve(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("hash") String hash);
-    class RequestResult { public String requestHash; public Long resultStayId,resultTaskLogId,resultAssignmentBatchId,resultIssueLogId,resultMaintenanceLogId,resultRoomChangeId,resultStayExtensionId,resultGuestCorrectionId,resultHandoverId,resultFolioId,resultFolioChargeId,resultServiceOrderId,resultPaymentRecordId; public Boolean expired; }
+    class RequestResult { public String requestHash; public Long resultStayId,resultTaskLogId,resultAssignmentBatchId,resultIssueLogId,resultMaintenanceLogId,resultRoomChangeId,resultStayExtensionId,resultGuestCorrectionId,resultHandoverId,resultFolioId,resultFolioChargeId,resultServiceOrderId,resultPaymentRecordId,resultCashierShiftId; public Boolean expired; }
     @Select("""
-        select request_hash,result_stay_id,result_task_log_id,result_assignment_batch_id,result_issue_log_id,result_maintenance_log_id,result_room_change_id,result_stay_extension_id,result_guest_correction_id,result_handover_id,result_folio_id,result_folio_charge_id,result_service_order_id,result_payment_record_id,expires_at <= clock_timestamp() expired
+        select request_hash,result_stay_id,result_task_log_id,result_assignment_batch_id,result_issue_log_id,result_maintenance_log_id,result_room_change_id,result_stay_extension_id,result_guest_correction_id,result_handover_id,result_folio_id,result_folio_charge_id,result_service_order_id,result_payment_record_id,result_cashier_shift_id,expires_at <= clock_timestamp() expired
         from idempotency_requests where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)
         """)
     RequestResult request(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key);
@@ -45,6 +45,8 @@ public interface StayMapper {
     int completeServiceOrder(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("order") long order);
     @Update("update idempotency_requests set result_payment_record_id=#{payment} where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)")
     int completePaymentRecord(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("payment") long payment);
+    @Update("update idempotency_requests set result_cashier_shift_id=#{shift} where operator_id=#{actor} and operation=#{operation} and request_key=CAST(#{key} AS uuid)")
+    int completeCashierShift(@Param("actor") long actor,@Param("operation") String operation,@Param("key") String key,@Param("shift") long shift);
     @Insert("""
         insert into stay_records(check_in_at,expected_check_out_at,created_by,notes)
         values(#{checkInAt},#{expectedCheckOutAt},#{actor},#{notes})

@@ -28,4 +28,9 @@ public class BusinessActorGuard {
         if(!RolePermissions.permissions(users.roles(actor)).contains(permission))
             throw new ApiException(403,"ACCESS_DENIED","当前账号没有执行此操作的权限");
     }
+    /** Lock-free probe for either/or permission decisions; does not throw. */
+    public boolean hasPermission(long actor,String permission) {
+        var user=users.selectById(actor);
+        return user!=null && user.enabled && RolePermissions.permissions(users.roles(actor)).contains(permission);
+    }
 }

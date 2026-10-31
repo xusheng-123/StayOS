@@ -26,6 +26,8 @@ const router = createRouter({
       { path: 'billing', component: () => import('../views/BillingListView.vue'), meta: { permission: 'billing:read' } },
       { path: 'billing/config', component: () => import('../views/BillingConfigView.vue'), meta: { permission: 'billing:read' } },
       { path: 'billing/folios/:id', component: () => import('../views/FolioDetailView.vue'), meta: { permission: 'billing:read' } },
+      { path: 'cashier', component: () => import('../views/CashierShiftView.vue'), meta: { permission: 'cashier:operate' } },
+      { path: 'reports/daily', component: () => import('../views/DailyReportsView.vue'), meta: { permission: 'report:finance' } },
       { path: 'manage/room-types', component: () => import('../views/RoomTypeManageView.vue'), meta: { permission: 'room:manage' } },
       { path: 'forbidden', component: () => import('../views/ForbiddenView.vue') },
     ] },

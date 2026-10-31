@@ -558,7 +558,7 @@ git diff --check
 | V1.3 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r3：JUnit 386、交班浏览器 8 项全通过及构建打包；V1.3-DELIVERY.md |
 | V1.4 | DEFERRED | 酒店启用住中服务后安排 | 本文第 10 节 |
 | V2.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r1：JUnit 420、账务浏览器 4 项全通过及构建打包；V2.0-DELIVERY.md |
-| V2.1 | WAITING_DEPENDENCY | 等 V2.0 验收 | 本文第 12 节 |
+| V2.1 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r1：JUnit 447、12 套浏览器 134 项全通过（含收银 1 项）及构建打包；V2.1-DELIVERY.md |
 | V3.0 | WAITING_DEPENDENCY | 等 V2.1 验收 | 本文第 13 节 |
 | V4.0 | WAITING_DEPENDENCY | 等 V3.0；再核实渠道条件 | 本文第 14 节 |
 | V4.1/V4.2 | DEFERRED | 直订/真实支付需明确启用及供应商 | 本文第 15 节 |
@@ -585,13 +585,13 @@ git diff --check
 
 ## 21. 最近交接记录
 
-### 2026-10-31：V2.0 账务基础完成并提交 Git
+### 2026-10-31：V2.1 收银交班、营业日与经营报表完成并提交 Git
 
-- 经用户授权"开始做V2.0"，按第 11 节完成全部阶段并本地提交（不推送；推送远程需用户单独授权）。迁移 V16 新增 8 张账务表（政策版本/价目/日价/服务价目/消费请求/客账/费用/收退款/事件），幂等表扩 4 个结果列与 11 个 BILLING 操作；受限运行角色补账务表 INSERT 与配置表 UPDATE，费用/流水/事件无 UPDATE/DELETE；`/api/billing|folios|service-orders/**` 显式放行；权限 `billing:read|charge|receive`（前台、总经理）、`billing:adjust|refund|configure`（仅总经理）。审计新增 BILLING 模块 15 个动作。
-- 金额与安全规则：单币种 CNY、正数 NUMERIC(18,2)、方向分列；净应收/净实收/余额分项展示不合成"收入"；费用只增不改（触发器+权限双重只追加）；退款额度 = min(原收款未退部分，预收余额)，客账行锁+约束防并发超退；一入住一账、非现金凭证号部分唯一防重；账务表不复制住客身份资料；普通收据不标为法定发票；不接真实自动支付。V1 历史入住接入用 PRICING_REQUIRED+charges_effective_from，不回填。
-- 关键修复（实测发现）：只读事务内 SELECT FOR SHARE 触发 SQLState 25006，新增 `BusinessActorGuard.requireRead` 无锁读校验（8 个账务读入口）；policyOverview 未滤生效版本致政策重复渲染，history 改为只含归档版本；结账后重开按钮误用含 OPEN 状态的 canAdjust 永不显示，新增 canReopen。
-- 有效验收证据：`.local/releases/V2.0/20261031-173211/`（r1：JUnit 420、0 失败/0 错误/0 跳过；账务浏览器 4 项 0 flaky；typecheck/build/package 退出码 0）。当前最高迁移 V16，下一号 V17；HandoverSchemaTest 迁移计数已更新为 2（V15+V16）。
-- 本版同时补记 V1.3 遗漏：`docs/API.md`、`docs/DATABASE.md` 增加 V1.3/V15 补登记节，并完整登记 V2.0 接口与表结构。详细交接见 `docs/releases/V2.0-DELIVERY.md`。下一行动：V2.1 等用户明确授权后从第 12 节开始；V1.4 保持 DEFERRED。
+- 经用户授权"推送新版本，接着开始下一阶段"，按第 12 节完成全部阶段；V2.0 提交 `422b504` 经同一授权推送远程（推送凭据弹窗由用户完成）。迁移 V17 新增 5 张表（`business_days`/`cashier_shifts`/`cash_counts`/`daily_close_runs`/`daily_reports`），`payment_records` 补 `cashier_shift_id`（入账时点归属、事后不回改），幂等表扩 `result_cashier_shift_id` 与 3 个 CASHIER_SHIFT 操作；权限 `cashier:operate`（前台、总经理）、`cashier:close` 与 `report:finance`（仅总经理）；审计新增 CASHIER 模块 4 动作并补入 `audit:business` 覆盖。`/api/cashier-shifts|business-days|reports/**` 显式放行。
+- 核心规则：班次 OPEN→SUBMITTED→CONFIRMED 单向（触发器白名单、CONFIRMED 不可变），一个收银员同时仅一个进行中班次（偏导唯一索引）；账面应存 = 备用金 + 实收现金 − 退款现金，实盘差异只入不可变 `cash_counts`，从不为平账修改旧收款；关账人工触发三段事务（预约 RUNNING → 校验房费逐条具名 → 汇总校对 → 固化日报快照 → 标记 CLOSED），每营业日唯一 RUNNING 批次靠数据库偏导唯一索引（不靠 JVM 锁）；失败留 FAILED 原因、营业日保持 OPEN 可重试；不因日切自动退房；关账后不改原日报，当期调整按 `reversal_of` 关联原营业日；可售房 = 启用房 − 维修停售覆盖，分母不可靠显式"数据不足"，不伪造 ADR。
+- 关键修复（实测发现）：关账进度触发器初版把 RUNNING→RUNNING 进度更新一并拒绝导致关账必败（409），改为仅拒绝终态改动与携带终止字段的进度更新；`CountRow` 缺 `id` 字段致 useGeneratedKeys 抛 ExecutorException（提交 500）；JSONB 快照读回 `PGobject`、`created_at` 读回 `Timestamp` 两次 ClassCastException，统一归一化（金额按 USE_BIG_DECIMAL_FOR_FLOATS 保留刻度）；e2e 金额断言受测试端 Double 解析丢刻度影响，改 `decimalValue()` 数值比较；连续 MessageBox 卸载动画期 `.el-message-box` 严格模式冲突，按标题过滤定位；`AuditQuery` 遗漏 CASHIER 模块授权补入。
+- 有效验收证据：`.local/releases/V2.1/20261031-200848/`（r1：JUnit 447、0 失败/0 错误/0 跳过；12 套浏览器 134 项全通过 0 flaky，含收银浏览器 1 项；typecheck/build/package 退出码 0）。当前最高迁移 V17，下一号 V18；OperationsInfrastructureTest 迁移计数更新为 17，5 个 SchemaTest 计数 +1。
+- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V2.1 接口与表结构；详细交接见 `docs/releases/V2.1-DELIVERY.md`。下一行动：V3.0 等用户明确授权后从第 13 节开始；V1.4/V4.x/V6.0 保持 DEFERRED。
 
 后续交接每次替换“最近记录”，较早详细记录放对应 `docs/releases/`；不删除原始验收证据。
 

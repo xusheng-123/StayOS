@@ -495,3 +495,22 @@ V1.3 当时漏登记本文件，这里补记接口边界；完整规则与验收
 回执与详情不含住客证件、电话；账务表不复制住客身份资料。普通收据明确标注为酒店内部凭证，不代表法定发票；系统不接入真实自动支付。`/api/folios/result/{key}` 查询本人幂等回执。
 
 主要错误码：`BILLING_POLICY_REQUIRED`（无生效政策）、`FOLIO_REQUIRED`/`FOLIO_NOT_OPENED`/`FOLIO_STATE`（客账不存在或状态不符）、`RATE_PLAN_NOT_FOUND`（价目不存在或不适用，含他房型方案）、`RATE_PLAN_DISABLED`、`NO_ROOM_SEGMENT`（该营业日无覆盖住房段）、`CHARGE_ALREADY_POSTED`/`CHARGE_BEFORE_EFFECTIVE`/`ZERO_AMOUNT_CHARGE`/`CREDIT_EXCEEDS_CHARGE`/`NOTHING_TO_CREDIT`（费用与调整边界）、`REFUND_EXCEEDS_LIMIT`/`NOTHING_TO_REFUND`（退款额度）、`OUTSTANDING_BALANCE`（余额未确认）、`STALE_VERSION`（版本冲突）。一入住一账由 `folios.stay_record_id` 唯一约束保证（冲突返回 `FOLIO_ALREADY_EXISTS`）；非现金同凭证号防重由部分唯一索引保证（同客账、同方向、同方式、同参考号，现金除外，冲突返回 `PAYMENT_REFERENCE_EXISTS`）；同来源重复入账返回 `CHARGE_ALREADY_POSTED`，政策并发发布返回 `POLICY_ACTIVE_CONFLICT`。
+
+## V2.1 收银交班、营业日与经营报表接口
+
+按开发手册第 12 节实现；权限 `cashier:operate`（前台/总经理，班次查询/开启/提交、营业日查询）、`cashier:close`（仅总经理，班次确认、营业日关账）、`report:finance`（仅总经理，日报查询）；客房岗位与系统管理员无收银权限，看不到金额。金额一律十进制字符串（两位小数）；营业日按 Asia/Shanghai 自然日，资金归日按营业日固定政策的日切时间（凌晨 00:00 至日切前的收退款归前一营业日）。三个写操作全部带 UUID `Idempotency-Key`（24 小时同键同内容回放），班次提交/确认带版本乐观锁。
+
+| 方法与路径 | 规则 |
+| --- | --- |
+| `GET /api/cashier-shifts?scope=&status=&page=&pageSize=` | 班次分页；`scope=all` 需 `cashier:close`，否则只看本人 |
+| `POST /api/cashier-shifts` | `{openedFloat}`；同一收银员同时仅一个进行中班次（`SHIFT_ALREADY_OPEN`）；当日营业日行随开班惰性创建并固定生效政策 |
+| `GET /api/cashier-shifts/{id}` | 班次详情（本人或 `cashier:close`）：金额分项 receipts/refunds/expectedCash |
+| `POST /api/cashier-shifts/{id}/submit` | `{countedCash,differenceReason?,version}`；账面应存 = 备用金 + 实收现金 − 退款现金；差异非零必须填原因，差异只写入不可变实盘记录，**不回改任何已入账收款**；版本不符 `STALE_VERSION` |
+| `POST /api/cashier-shifts/{id}/confirm` | 仅 `cashier:close`；SUBMITTED → CONFIRMED 一次性确认 |
+| `GET /api/business-days?limit=` | 最近营业日列表（日切、状态、关账人、是否已有固化日报、是否当天） |
+| `POST /api/business-days/{date}/close` | 仅 `cashier:close`；人工关账三段事务：锁营业日并插入 RUNNING 批次 → 校验房费（未开立客账/缺少房费/日价不符逐条具名）→ 汇总校对 → 固化日报快照 → 标记 CLOSED。失败留 FAILED 原因、营业日保持 OPEN 可重试；并发关账被每营业日唯一 RUNNING 索引拒绝（`DATA_CONFLICT`）；不因日切自动退房，关账后不重开 |
+| `GET /api/reports/daily?from=&to=&page=&pageSize=` | 仅 `report:finance`；固化快照分页：charges（费用/冲减/净应收/房晚/房费收入）、payments（收/退/净收/现金收/现金退）、occupancy（已售房晚/在住/可售/出租率/ADR/数据不足标记）、laterAdjustments（关账后关联原营业日的当期调整）、notes（口径说明） |
+
+分母口径：可售房 = 启用房 − 维修停售覆盖该日的房间；无可售房或无已售房晚时出租率/ADR 为 `null` 并在 `dataGaps` 标记"数据不足"，不做推算。原营业日关闭后不改原日报；当期调整记入当前营业日并按 `reversal_of` 关联原费用。
+
+主要错误码：`SHIFT_ALREADY_OPEN`（已有进行中班次）、`SHIFT_NOT_FOUND`、`SHIFT_STATE`（状态不符）、`STALE_VERSION`（版本冲突）、`BILLING_POLICY_REQUIRED`（无生效政策）、`DAY_ALREADY_CLOSED`（重复关账）、`CLOSE_FAILED`（关账校验未通过，message 含逐条问题明细）、`DATA_CONFLICT`（并发关账或约束冲突）、`VALIDATION_ERROR`（金额/日期格式）。

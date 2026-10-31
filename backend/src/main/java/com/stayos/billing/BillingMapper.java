@@ -24,7 +24,7 @@ public interface BillingMapper {
     class ChargeRow { public Long id,folioId,stayRecordId,roomSegmentId,policyVersion,ratePlanId,catalogItemId,reversalOf;
         public long actor; public LocalDate businessDate; public String direction,category,nameSnapshot,pricingUnitSnapshot,currency,sourceType,sourceKey,note,createdByName;
         public int quantity; public BigDecimal unitPriceSnapshot,amount; public OffsetDateTime createdAt; }
-    class PaymentRow { public Long id,folioId,refundOf; public long actor; public String direction,method,purpose,currency,methodReference,note,receivedByName;
+    class PaymentRow { public Long id,folioId,refundOf,cashierShiftId; public long actor; public String direction,method,purpose,currency,methodReference,note,receivedByName;
         public BigDecimal amount; public OffsetDateTime receivedAt; }
     class EventRow { public Long id; public String eventType,actorName,note; public OffsetDateTime createdAt; }
     class SumRow { public BigDecimal charges,credits,receipts,refunds; }
@@ -185,8 +185,8 @@ public interface BillingMapper {
     @Select(PAYMENT_SELECT+" where p.id=#{id}") PaymentRow paymentById(long id);
     @Select(PAYMENT_SELECT+" where p.folio_id=#{id} order by p.id") List<PaymentRow> paymentsByFolio(long id);
     @Insert("""
-        insert into payment_records(folio_id,direction,method,purpose,amount,currency,method_reference,refund_of,note,received_by)
-        values(#{folioId},#{direction},#{method},#{purpose},#{amount},#{currency},#{methodReference},#{refundOf},#{note},#{actor})
+        insert into payment_records(folio_id,direction,method,purpose,amount,currency,method_reference,refund_of,note,received_by,cashier_shift_id)
+        values(#{folioId},#{direction},#{method},#{purpose},#{amount},#{currency},#{methodReference},#{refundOf},#{note},#{actor},#{cashierShiftId})
         """) @Options(useGeneratedKeys=true,keyProperty="id")
     int insertPayment(PaymentRow row);
     @Select("select coalesce(sum(amount) filter (where direction='RECEIPT'),0) receipts,coalesce(sum(amount) filter (where direction='REFUND'),0) refunds from payment_records where folio_id=#{id}")

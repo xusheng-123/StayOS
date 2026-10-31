@@ -27,15 +27,16 @@ public class FolioService {
     private static final Set<String> CHARGE_OPERATIONS=Set.of("CHARGE_POST","CHARGE_ADJUST");
     private static final Set<String> PAYMENT_OPERATIONS=Set.of("PAYMENT_RECEIVE","PAYMENT_REFUND");
     private final BillingMapper billing;
+    private final com.stayos.cashier.CashierMapper cashierShifts;
     private final StayMapper requestsMapper;
     private final IdempotencyService requests;
     private final BusinessActorGuard actors;
     private final AuditService audit;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-    public FolioService(BillingMapper billing,StayMapper requestsMapper,IdempotencyService requests,
+    public FolioService(BillingMapper billing,com.stayos.cashier.CashierMapper cashierShifts,StayMapper requestsMapper,IdempotencyService requests,
                         BusinessActorGuard actors,AuditService audit,com.fasterxml.jackson.databind.ObjectMapper json) {
-        this.billing=billing; this.requestsMapper=requestsMapper; this.requests=requests; this.actors=actors; this.audit=audit; this.json=json;
+        this.billing=billing; this.cashierShifts=cashierShifts; this.requestsMapper=requestsMapper; this.requests=requests; this.actors=actors; this.audit=audit; this.json=json;
     }
 
     // ---------- queries ----------
@@ -211,6 +212,8 @@ public class FolioService {
         var row=new PaymentRow();
         row.folioId=folio.id; row.direction="RECEIPT"; row.method=input.method(); row.purpose=input.purpose();
         row.amount=amount; row.currency=folio.currency; row.methodReference=reference; row.note=note; row.actor=actor;
+        // 现金/非现金收款都挂到收款人当前班次（可能为空：未开班的历史或当前员工），V2.1 报表按班次归属。
+        row.cashierShiftId=cashierShifts.openShiftOf(actor);
         if(billing.insertPayment(row)!=1) throw new IllegalStateException("Payment was not saved");
         audit.success(actor,"PAYMENT_RECEIVE","BILLING",row.id);
         requests.completePaymentRecord(actor,"PAYMENT_RECEIVE",key,row.id);

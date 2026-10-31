@@ -65,7 +65,7 @@ public class ApiErrors {
     ResponseEntity<?> method(Exception ignored) { return ResponseEntity.status(405).body(ApiResponse.error("METHOD_NOT_ALLOWED","此接口不支持该操作")); }
     @ExceptionHandler(Exception.class)
     ResponseEntity<?> unexpected(Exception failure) {
-        log.error("Unexpected request failure id={} category={}",org.slf4j.MDC.get("requestId"),failure.getClass().getSimpleName());
+        log.error("Unexpected request failure id={} category={}",org.slf4j.MDC.get("requestId"),failure.getClass().getSimpleName(),failure);
         recordFailure(); return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "操作失败，请稍后重试"));
     }
 }

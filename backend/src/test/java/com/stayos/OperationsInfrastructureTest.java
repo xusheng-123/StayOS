@@ -48,7 +48,7 @@ class OperationsInfrastructureTest {
         ps(out,"wrong-key",restore+" -ExpectedGuestKeyFingerprint "+"f".repeat(64),false,Map.of());
         try {
             ps(out,"right-key",restore+" -ExpectedGuestKeyFingerprint "+fingerprint+" | ConvertTo-Json -Compress",true,Map.of());
-            try(var c=owner(database);var q=c.createStatement();var r=q.executeQuery("select count(*) from flyway_schema_history where success")){r.next();assertThat(r.getInt(1)).isEqualTo(16);}
+            try(var c=owner(database);var q=c.createStatement();var r=q.executeQuery("select count(*) from flyway_schema_history where success")){r.next();assertThat(r.getInt(1)).isEqualTo(17);}
         }finally {try(var c=owner("stayos_test");var q=c.createStatement()){q.execute("drop database if exists "+database+" with(force)");}}
         String task="StayOS-Backup-Ops"+UUID.randomUUID().toString().replace("-","");
         ps(out,"task-preview","& "+quote(scripts.resolve("install-backup-task.ps1").toString())+" -Database stayos_test"+args+" -TaskName "+task+" -WhatIf",true,Map.of());

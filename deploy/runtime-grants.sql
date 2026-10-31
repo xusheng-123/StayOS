@@ -10,10 +10,12 @@ GRANT INSERT ON users, user_roles, room_types, rooms, guests, stay_records, stay
     room_maintenance_logs, room_changes, stay_extensions, guest_corrections, shift_handovers,
     handover_items, handover_events, billing_policies, rate_plans, room_rate_days, service_catalog,
     service_orders, service_order_items, folios, folio_charges, payment_records, folio_events,
+    business_days, cashier_shifts, cash_counts, daily_close_runs, daily_reports,
     audit_logs TO :"runtime_role";
 GRANT UPDATE ON users, room_types, rooms, stay_records, stay_room_segments, idempotency_requests,
     housekeeping_tasks, room_issues, room_maintenance_stops, shift_handovers,
-    billing_policies, rate_plans, room_rate_days, service_catalog, folios, service_orders TO :"runtime_role";
+    billing_policies, rate_plans, room_rate_days, service_catalog, folios, service_orders,
+    business_days, cashier_shifts, daily_close_runs TO :"runtime_role";
 GRANT UPDATE (display_name, document_type, document_ciphertext, document_mask, phone_ciphertext, phone_mask, version)
     ON guests TO :"runtime_role";
 GRANT DELETE ON user_roles, service_order_items TO :"runtime_role";
