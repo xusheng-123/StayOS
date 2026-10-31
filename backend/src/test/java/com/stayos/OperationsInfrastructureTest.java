@@ -48,7 +48,7 @@ class OperationsInfrastructureTest {
         ps(out,"wrong-key",restore+" -ExpectedGuestKeyFingerprint "+"f".repeat(64),false,Map.of());
         try {
             ps(out,"right-key",restore+" -ExpectedGuestKeyFingerprint "+fingerprint+" | ConvertTo-Json -Compress",true,Map.of());
-            try(var c=owner(database);var q=c.createStatement();var r=q.executeQuery("select count(*) from flyway_schema_history where success")){r.next();assertThat(r.getInt(1)).isEqualTo(14);}
+            try(var c=owner(database);var q=c.createStatement();var r=q.executeQuery("select count(*) from flyway_schema_history where success")){r.next();assertThat(r.getInt(1)).isEqualTo(15);}
         }finally {try(var c=owner("stayos_test");var q=c.createStatement()){q.execute("drop database if exists "+database+" with(force)");}}
         String task="StayOS-Backup-Ops"+UUID.randomUUID().toString().replace("-","");
         ps(out,"task-preview","& "+quote(scripts.resolve("install-backup-task.ps1").toString())+" -Database stayos_test"+args+" -TaskName "+task+" -WhatIf",true,Map.of());
@@ -72,7 +72,7 @@ class OperationsInfrastructureTest {
             try(var c=owner("stayos_test");var s=c.createStatement()){s.execute("create database "+database);}
             Flyway.configure().dataSource(url+database,owner,ownerPassword).locations("classpath:db/migration").cleanDisabled(true).load().migrate();
             try(var c=owner(database)) {
-                for(String staff:List.of("ADMIN","FRONT_DESK","HOUSEKEEPING_MANAGER","HOUSEKEEPING_STAFF")){
+                for(String staff:List.of("ADMIN","FRONT_DESK","HOTEL_MANAGER","HOUSEKEEPING_MANAGER","HOUSEKEEPING_STAFF")){
                     try(var q=c.prepareStatement("insert into users(username,password_hash,display_name) values(?,?,?) returning id")){
                         q.setString(1,"runtime_"+staff.toLowerCase(Locale.ROOT));q.setString(2,new BCryptPasswordEncoder().encode(staffPassword));q.setString(3,"虚构受限账号");
                         long id;try(var r=q.executeQuery()){r.next();id=r.getLong(1);}try(var p=c.prepareStatement("insert into user_roles(user_id,role_id) select ?,id from roles where role_code=?")){p.setLong(1,id);p.setString(2,staff);p.executeUpdate();}
@@ -85,14 +85,14 @@ class OperationsInfrastructureTest {
             var restricted=new DriverManagerDataSource(url+database,role,runtimePassword);new ProductionDatabaseGuard(restricted).run(new DefaultApplicationArguments());
             assertThatThrownBy(()->new ProductionDatabaseGuard(new DriverManagerDataSource(url+database,owner,ownerPassword)).run(new DefaultApplicationArguments())).isInstanceOf(IllegalStateException.class);
             try(var c=restricted.getConnection();var s=c.createStatement()) {
-                for(String forbidden:List.of("create table public.forbidden_table(id integer)","delete from audit_logs","update audit_logs set result='FAILURE'","delete from housekeeping_task_logs","delete from room_changes","delete from stay_records","delete from stay_extensions","update stay_extensions set reason='rewritten'","delete from guest_corrections","update guests set encryption_key_id='rewritten'","update guests set notes='rewritten'","update guest_corrections set reason='rewritten'"))
+                for(String forbidden:List.of("create table public.forbidden_table(id integer)","delete from audit_logs","update audit_logs set result='FAILURE'","delete from housekeeping_task_logs","delete from room_changes","delete from stay_records","delete from stay_extensions","update stay_extensions set reason='rewritten'","delete from guest_corrections","update guests set encryption_key_id='rewritten'","update guests set notes='rewritten'","update guest_corrections set reason='rewritten'","delete from shift_handovers","delete from handover_items","delete from handover_events","update handover_events set reason='rewritten'","update handover_items set content='rewritten'"))
                     assertThatThrownBy(()->s.execute(forbidden)).isInstanceOf(SQLException.class).extracting(e->((SQLException)e).getSQLState()).isEqualTo("42501");
             }
             int port;try(var socket=new java.net.ServerSocket(0)){port=socket.getLocalPort();}
             var builder=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin","java.exe").toString(),"-XX:TieredStopAtLevel=1","-cp",System.getProperty("surefire.test.class.path",System.getProperty("java.class.path")),"com.stayos.StayosApplication","--spring.profiles.active=test","--spring.datasource.url="+url+database,"--spring.datasource.username="+role,"--server.port="+port,"--server.address=127.0.0.1","--logging.level.com.stayos.StayosApplication=INFO").redirectErrorStream(true).redirectOutput(out.resolve("runtime-application.log").toFile());
             builder.environment().put("SPRING_DATASOURCE_PASSWORD",runtimePassword);builder.environment().put("SPRING_FLYWAY_USER",owner);builder.environment().put("SPRING_FLYWAY_PASSWORD",ownerPassword);builder.environment().put("SPRING_FLYWAY_URL",url+database);app=builder.start();
             SystemAcceptanceTest.ready(app,port);
-            var admin=login(port,"ADMIN",staffPassword);var manager=login(port,"HOUSEKEEPING_MANAGER",staffPassword);var staff=login(port,"HOUSEKEEPING_STAFF",staffPassword);var front=login(port,"FRONT_DESK",staffPassword);
+            var admin=login(port,"ADMIN",staffPassword);var manager=login(port,"HOUSEKEEPING_MANAGER",staffPassword);var staff=login(port,"HOUSEKEEPING_STAFF",staffPassword);var front=login(port,"FRONT_DESK",staffPassword);var hotel=login(port,"HOTEL_MANAGER",staffPassword);
             long type=admin.post("/api/room-types",Map.of("typeCode","RUNTIME","typeName","虚构受限房型","suggestedOccupancy",2)).path("id").asLong();
             long room=admin.post("/api/rooms",Map.of("roomNumber","RUNTIME01","floor",1,"roomTypeId",type)).path("id").asLong();
             long staffId=ok(staff.get("/api/auth/me")).path("id").asLong();var batch=manager.post("/api/housekeeping-tasks/batch-assign",Map.of("assigneeId",staffId,"roomIds",List.of(room)));long task=batch.path("items").get(0).path("taskId").asLong();
@@ -101,6 +101,9 @@ class OperationsInfrastructureTest {
             var extension=front.post("/api/stays/"+stay.path("id").asLong()+"/extensions",Map.of("segmentId",stay.path("segmentId").asLong(),"version",stay.path("version").asLong(),"newExpectedCheckOutAt",java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusDays(2).toString(),"reason","虚构受限账号续住"));assertThat(extension.path("stayVersion").asLong()).isEqualTo(1);
             var correction=front.post("/api/stays/"+stay.path("id").asLong()+"/guests/"+stay.path("guests").get(0).path("id").asLong()+"/corrections",Map.of("version",0,"changes",Map.of("name","虚构受限更正","phone","13900000995"),"reason","虚构受限账号更正"));
             assertThat(correction.path("guestVersion").asLong()).isEqualTo(1);
+            long hotelId=ok(hotel.get("/api/auth/me")).path("id").asLong();var handover=front.post("/api/handovers",Map.of("scope","FRONT_DESK","receiverId",hotelId,"shiftStartAt",OffsetDateTime.now(ZoneOffset.UTC).toString(),"shiftEndAt",OffsetDateTime.now(ZoneOffset.UTC).plusHours(8).toString(),"summary","虚构受限交班","items",List.of(Map.of("category","CUSTOM","content","虚构受限交班事项"))));assertThat(handover.path("status").asText()).isEqualTo("DRAFT");
+            front.post("/api/handovers/"+handover.path("id").asLong()+"/submit",Map.of("version",handover.path("version").asLong()));
+            var acknowledged=hotel.post("/api/handovers/"+handover.path("id").asLong()+"/acknowledge",Map.of("version",handover.path("version").asLong()+1));assertThat(acknowledged.path("status").asText()).isEqualTo("ACKNOWLEDGED");
             var issue=manager.post("/api/room-issues",Map.of("roomId",room,"issueType","FACILITY","severity","LOW","description","虚构受限故障"));assertThat(issue.path("id").asLong()).isPositive();
             front.post("/api/stays/"+stay.path("id").asLong()+"/check-out",Map.of("segmentId",stay.path("segmentId").asLong()));assertThat(ok(front.get("/api/rooms/"+room)).path("cleaningStatus").asText()).isEqualTo("DIRTY");
             assertThat(ok(manager.get("/api/operations/summary")).path("unassignedTasks").asLong()).isEqualTo(1);

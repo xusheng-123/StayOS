@@ -64,6 +64,12 @@ public class IdempotencyService {
     public void completeCorrection(long actor,String requestKey,long correction) {
         if(mapper.completeCorrection(actor,key(requestKey),correction)!=1) throw new IllegalStateException("Missing guest correction reservation");
     }
+    @Transactional(propagation=Propagation.MANDATORY)
+    public Long reserveHandover(long actor,String operation,String key,Object input) { return reserveResult(actor,operation,key,input,"HANDOVER"); }
+    @Transactional(propagation=Propagation.MANDATORY)
+    public void completeHandover(long actor,String operation,String requestKey,long handover) {
+        if(mapper.completeHandover(actor,operation,key(requestKey),handover)!=1) throw new IllegalStateException("Missing handover reservation");
+    }
     private Long reserveResult(long actor,String operation,String requestKey,Object canonicalInput,String kind) {
         String key=key(requestKey),hash;
         try { hash=protection.fingerprint(json.writeValueAsBytes(canonicalInput)); }
@@ -73,7 +79,7 @@ public class IdempotencyService {
         var old=mapper.request(actor,operation,key);
         if(old.expired) throw new ApiException(409,"IDEMPOTENCY_KEY_EXPIRED","原请求已超过 24 小时，请先查询业务记录再确认是否需要新操作");
         if(!old.requestHash.equals(hash)) throw new ApiException(409,"IDEMPOTENCY_MISMATCH","同一请求标识不能提交不同内容，请确认原操作结果");
-        Long result=switch(kind) { case "CORRECTION" -> old.resultGuestCorrectionId; case "EXTENSION" -> old.resultStayExtensionId; case "CHANGE" -> old.resultRoomChangeId; case "ISSUE" -> old.resultIssueLogId; case "MAINTENANCE" -> old.resultMaintenanceLogId; case "TASK" -> old.resultTaskLogId; case "BATCH" -> old.resultAssignmentBatchId; default -> old.resultStayId; };
+        Long result=switch(kind) { case "HANDOVER" -> old.resultHandoverId; case "CORRECTION" -> old.resultGuestCorrectionId; case "EXTENSION" -> old.resultStayExtensionId; case "CHANGE" -> old.resultRoomChangeId; case "ISSUE" -> old.resultIssueLogId; case "MAINTENANCE" -> old.resultMaintenanceLogId; case "TASK" -> old.resultTaskLogId; case "BATCH" -> old.resultAssignmentBatchId; default -> old.resultStayId; };
         if(result==null) throw new ApiException(409,"REQUEST_IN_PROGRESS","操作正在处理中，请稍后重试原请求");
         return result;
     }

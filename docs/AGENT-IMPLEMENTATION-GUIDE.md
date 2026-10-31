@@ -555,7 +555,7 @@ git diff --check
 | V1.0 | VERIFIED_LOCAL | 真实上线清单单独落实 | V1-CLOSURE.md；2026-10-31 第五批 |
 | V1.1 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | 最终 final-r3：JUnit 316、浏览器 141 全通过及前后端构建；V1.1-DELIVERY.md |
 | V1.2 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | final-r1：JUnit 356、浏览器 153 全通过及构建打包；V1.2-DELIVERY.md |
-| V1.3 | READY | 前置已满足，等待用户授权本版实施 | 本文第 9 节；本轮未开始 |
+| V1.3 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r3：JUnit 386、交班浏览器 8 项全通过及构建打包；V1.3-DELIVERY.md |
 | V1.4 | DEFERRED | 酒店启用住中服务后安排 | 本文第 10 节 |
 | V2.0 | WAITING_DEPENDENCY | 等 V1.3；启用 V1.4 时也需等其验收 | 本文第 11 节 |
 | V2.1 | WAITING_DEPENDENCY | 等 V2.0 验收 | 本文第 12 节 |
@@ -585,12 +585,13 @@ git diff --check
 
 ## 21. 最近交接记录
 
-### 2026-10-31：V1.0 收尾、V1.1、V1.2 成果提交 Git，确立"每版完成即提交"规则
+### 2026-10-31：V1.3 非财务交班与按需打印完成并提交 Git
 
-- 经用户授权，将此前全部未提交工作树一次收编入库（提交 `d9dcac2`，101 个文件）：V1.0 收尾加固（运营待办、登录与生产防护、备份与受限运行角色脚本、V1-CLOSURE/VERSION-ROADMAP）、V1.1 续住（V13）、V1.2 住客更正（V14）、执行手册与 AGENTS.md。仅本地提交，未推送远程。
-- 自本次起执行新规则（1.3 节、第 6 节 HANDOFF）：每版 VERIFY 通过后必须在 HANDOFF 阶段提交本地 Git；推送远程仍需用户单独授权。该规则由用户 2026-10-31 明确指示。
-- 有效验收证据不变：`.local/releases/V1.2/20261031-implementation/final-r1/`（JUnit 356、浏览器 153 全通过）；提交前后源码未变化，未重跑测试。当前最高迁移 V14，下一号 V15。
-- 下一行动：V1.3 保持 READY，等待用户明确授权后从第 9 节开始；V1.2 详细交接记录见 `docs/releases/V1.2-DELIVERY.md`。
+- 经用户授权"现在按照开发手册去做V1.3"，按第 9 节完成全部阶段并本地提交（仅提交不推送）。迁移 V15 新增 `shift_handovers/handover_items/handover_events`，幂等表扩 `result_handover_id` 与三个 HANDOVER 操作；受限运行角色补三表 INSERT 与 shift_handovers UPDATE；`/api/handovers/**` 显式放行；权限 `handover:front-desk`（前台、总经理）、`handover:housekeeping`（客房主管、总经理）。
+- 交付内容：创建→提交（冻结快照+重验接班人）→确认（仅接班人本人）→改派（仅 SUBMITTED、需原因）全状态机，数据库触发器强制不可变规则；前端列表/详情/表单、受控打印视图（重新校验后 `@media print` 仅输出交接单）、导航 17 交接班、运营页入口、操作记录交接班组。
+- 关键修复（实测发现）：带 JOIN 的 `FOR UPDATE OF h` 锁读在并发更新后经 EvalPlanQual 重查会跳过 join 键被改掉的行并返回 0 行，导致确认方 NPE 500；已改为单表主键锁 + "先版本后身份"校验（输方 409 STALE_VERSION），并发用例连续 12 次全绿。诊断用的 psql 实验数据曾污染测试库并使 r2 出现 2 个假失败，已清库并在 r3 消除；教训：在测试库手工实验后必须清理自建数据，测试清理按归属用户过滤不会替你兜底。
+- 有效验收证据：`.local/releases/V1.3/20261031-145951/`（r3：JUnit 386、0 失败/0 错误/0 跳过；交班浏览器 8 项 0 flaky；package/diff-check 退出码 0）；失败批次 r1/r2 原样保留于同目录。迁移计数断言已随 V15 更新（StayExtension 3、GuestCorrection 2、Housekeeping 7、备份恢复链 15）。当前最高迁移 V15，下一号 V16。
+- 详细交接与界面核对见 `docs/releases/V1.3-DELIVERY.md`。下一行动：V1.4 保持 DEFERRED，V2.0 等待用户明确授权后从第 11 节开始。
 
 后续交接每次替换“最近记录”，较早详细记录放对应 `docs/releases/`；不删除原始验收证据。
 

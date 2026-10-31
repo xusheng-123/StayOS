@@ -21,6 +21,8 @@ const router = createRouter({
       { path: 'manage/rooms', component: () => import('../views/RoomManageView.vue'), meta: { permission: 'room:manage' } },
       { path: 'manage/accounts', component: () => import('../views/AccountManageView.vue'), meta: { permission: 'system:manage' } },
       { path: 'operations', component: () => import('../views/OperationsView.vue'), meta: { anyPermissions: ['stay:manage', 'housekeeping:read', 'issue:report'] } },
+      { path: 'handovers', component: () => import('../views/HandoverListView.vue'), meta: { anyPermissions: ['handover:front-desk', 'handover:housekeeping'] } },
+      { path: 'handovers/:id', component: () => import('../views/HandoverDetailView.vue'), meta: { anyPermissions: ['handover:front-desk', 'handover:housekeeping'] } },
       { path: 'manage/room-types', component: () => import('../views/RoomTypeManageView.vue'), meta: { permission: 'room:manage' } },
       { path: 'forbidden', component: () => import('../views/ForbiddenView.vue') },
     ] },

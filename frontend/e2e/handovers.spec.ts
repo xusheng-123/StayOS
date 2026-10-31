@@ -1,0 +1,158 @@
+import { test, expect, type Page } from '@playwright/test'
+import type { HandoverDetail } from '../src/types/handover'
+const password = process.env.STAYOS_E2E_PASSWORD!
+const fixtures = JSON.parse(process.env.STAYOS_HANDOVER_FIXTURES || '{}') as Record<string, HandoverDetail>
+if (!password || !fixtures.draft || !fixtures.submitted) throw new Error('Run via isolated JUnit handover launcher')
+async function login(page: Page, role = 'FRONT_DESK') {
+  await page.context().clearCookies()
+  await page.goto('/login'); await page.getByLabel('账号', { exact: true }).fill(`handover_test_${role.toLowerCase()}`)
+  await page.getByLabel('密码', { exact: true }).fill(password); await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page).toHaveURL(/\/workspaces\//)
+}
+async function get<T>(page: Page, url: string): Promise<T> { const r = await page.request.get(url); expect(r.status()).toBe(200); return (await r.json()).data as T }
+async function send(page: Page, method: string, url: string, data?: unknown) {
+  const csrf = await get<{ headerName: string; token: string }>(page, '/api/auth/csrf')
+  const r = await page.request.fetch(url, { method, data, headers: { [csrf.headerName]: csrf.token, 'Idempotency-Key': crypto.randomUUID() } })
+  return r
+}
+const record = (page: Page, id: number) => page.getByRole('button', { name: `查看交班 ${id}`, exact: true })
+async function openDetail(page: Page, id: number) { await page.goto('/handovers'); await record(page, id).click(); await expect(page).toHaveURL(new RegExp(`/handovers/${id}$`)) }
+async function confirmBox(page: Page, title: string, button: string) {
+  const box = page.getByRole('dialog', { name: title, exact: true }); await expect(box).toBeVisible(); await box.getByRole('button', { name: button, exact: true }).click()
+}
+test('前台创建交班并提交，接班人本人确认后归档', async ({ page }) => {
+  await login(page)
+  await page.goto('/handovers')
+  await expect(page.getByRole('link', { name: /交接班/ })).toBeVisible()
+  await page.getByRole('button', { name: '新建交班', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '新建交班', exact: true })
+  await dialog.getByRole('combobox', { name: '接班人', exact: true }).click()
+  await page.getByRole('option', { name: /handover_test_hotel_manager$/ }).click()
+  await dialog.getByRole('button', { name: '添加事项', exact: true }).click()
+  await dialog.getByLabel('事项内容', { exact: true }).fill('前台钥匙柜钥匙一把待转交')
+  await dialog.getByLabel('交班摘要', { exact: true }).fill('虚构浏览器全流程交班')
+  await dialog.getByRole('button', { name: '创建交班草稿', exact: true }).click()
+  const successDialog = page.getByRole('dialog', { name: '交班创建成功', exact: true })
+  await expect(successDialog).toBeVisible()
+  const id = Number((await successDialog.textContent())!.match(/#(\d+)/)![1])
+  await successDialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await record(page, id).click(); await expect(page).toHaveURL(new RegExp(`/handovers/${id}$`))
+  await expect(page.locator('.el-tag').filter({ hasText: '草稿' })).toBeVisible()
+  // 提交后冻结：草稿接口再改稿必须被拒。
+  await page.getByRole('button', { name: '提交交接', exact: true }).click()
+  await confirmBox(page, '提交交接', '确认提交')
+  await expect(page.getByRole('alert').filter({ hasText: '交班已提交' })).toBeVisible()
+  await expect(page.locator('.el-tag').filter({ hasText: '待接班确认' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '编辑草稿', exact: true })).toHaveCount(0)
+  expect((await send(page, 'PUT', `/api/handovers/${id}`, { version: 1, receiverId: fixtures.draft.receiverId, shiftStartAt: new Date().toISOString(), shiftEndAt: new Date(Date.now() + 3600_000).toISOString(), summary: '虚构越权改稿', items: [] })).status()).toBe(409)
+  // 只有接班人本人看到确认入口；交班人不能替接班。
+  await login(page, 'HOTEL_MANAGER')
+  await openDetail(page, id)
+  await page.getByRole('button', { name: '确认接班', exact: true }).click()
+  await confirmBox(page, '确认接班', '确认接班')
+  await expect(page.getByRole('alert').filter({ hasText: '接班已确认' })).toBeVisible()
+  await expect(page.locator('.el-tag').filter({ hasText: '接班已确认' })).toBeVisible()
+  await expect(page.locator('.handover-event-list')).toContainText('确认接班')
+})
+test('范围隔离：前台与客房互不可见，无权岗位无入口', async ({ page }) => {
+  await login(page)
+  await page.goto('/handovers')
+  const scopeSelect = page.getByLabel('交班范围', { exact: true })
+  await expect(scopeSelect).toBeDisabled(); await expect(scopeSelect).toContainText('前台'); await expect(scopeSelect).not.toContainText('客房')
+  await expect((await send(page, 'GET', '/api/handovers?scope=HOUSEKEEPING')).status()).toBe(403)
+  await expect((await send(page, 'GET', `/api/handovers/${fixtures.housekeeping!.id}`)).status()).toBe(403)
+  await login(page, 'HOUSEKEEPING_MANAGER')
+  await page.goto('/handovers')
+  await expect(scopeSelect).toBeDisabled(); await expect(scopeSelect).toContainText('客房'); await expect(scopeSelect).not.toContainText('前台')
+  await expect((await send(page, 'GET', '/api/handovers?scope=FRONT_DESK')).status()).toBe(403)
+  await login(page, 'HOTEL_MANAGER')
+  await page.goto('/handovers')
+  await expect(scopeSelect).toBeEnabled(); await expect(scopeSelect).toContainText('前台'); await expect(scopeSelect).toContainText('客房')
+  await login(page, 'HOUSEKEEPING_STAFF')
+  await expect(page.getByRole('link', { name: /交接班/ })).toHaveCount(0)
+  await page.goto('/handovers'); await expect(page.getByText('无权访问此工作区', { exact: true })).toBeVisible()
+})
+test('提交后改派接班人需要原因并全程留痕', async ({ page }) => {
+  await login(page)
+  const handover = fixtures.reassign!
+  const submitted = await (await send(page, 'POST', `/api/handovers/${handover.id}/submit`, { version: handover.version })).json()
+  expect(submitted.data.status).toBe('SUBMITTED')
+  await openDetail(page, handover.id)
+  await page.getByRole('button', { name: '改派接班人', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '改派接班人', exact: true })
+  await dialog.getByRole('combobox', { name: '新的接班人', exact: true }).click()
+  await page.getByRole('option', { name: /handover_test_hotel_manager2/ }).click()
+  await dialog.getByRole('button', { name: '确认改派', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('请选择新的接班人并填写改派原因')
+  await dialog.getByLabel('改派原因', { exact: true }).fill('接班人临时调岗，改由总经理接收')
+  await dialog.getByRole('button', { name: '确认改派', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '已改派接班人' })).toBeVisible()
+  await expect(page.locator('.handover-event-list')).toContainText('改派接班人')
+  await expect(page.locator('.handover-event-list')).toContainText('接班人临时调岗')
+  await expect(page.locator('.el-tag').filter({ hasText: '待接班确认' })).toBeVisible()
+})
+test('草稿并发修改冲突有明确提示，不覆盖他人修改', async ({ page }) => {
+  await login(page)
+  const handover = fixtures.draft!
+  await openDetail(page, handover.id)
+  await page.getByRole('button', { name: '编辑草稿', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '修改交班草稿', exact: true })
+  const other = await send(page, 'PUT', `/api/handovers/${handover.id}`, {
+    version: handover.version, receiverId: handover.receiverId, shiftStartAt: handover.shiftStartAt, shiftEndAt: handover.shiftEndAt,
+    summary: '其他员工先行修改', items: [],
+  }); expect(other.status()).toBe(200)
+  await dialog.getByLabel('交班摘要', { exact: true }).fill('本机滞留的旧草稿修改')
+  await dialog.getByRole('button', { name: '保存草稿', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('交班草稿已被其他人修改')
+  expect((await get<HandoverDetail>(page, `/api/handovers/${handover.id}`)).summary).toBe('其他员工先行修改')
+})
+test('非接班人不能确认，重复确认被拒且状态不变', async ({ page }) => {
+  await login(page)
+  const handover = fixtures.submitted!
+  await openDetail(page, handover.id)
+  await expect(page.getByRole('button', { name: '确认接班', exact: true })).toHaveCount(0)
+  expect((await send(page, 'POST', `/api/handovers/${handover.id}/acknowledge`, { version: handover.version })).status()).toBe(403)
+  await login(page, 'HOTEL_MANAGER')
+  const first = await send(page, 'POST', `/api/handovers/${handover.id}/acknowledge`, { version: handover.version }); expect(first.status()).toBe(200)
+  expect((await send(page, 'POST', `/api/handovers/${handover.id}/acknowledge`, { version: handover.version + 1 })).status()).toBe(409)
+  await openDetail(page, handover.id)
+  await expect(page.locator('.el-tag').filter({ hasText: '接班已确认' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '改派接班人', exact: true })).toHaveCount(0)
+})
+test('打印视图只输出交接单，不含应用界面', async ({ page }) => {
+  await login(page)
+  const handover = fixtures.acknowledged!
+  await openDetail(page, handover.id)
+  const sheet = page.locator('.handover-print')
+  await expect(sheet).toBeHidden()
+  await page.getByRole('button', { name: '打印交接单', exact: true }).click()
+  await page.emulateMedia({ media: 'print' })
+  await expect(sheet).toBeVisible()
+  await expect(page.locator('#app')).toBeHidden()
+  await expect(sheet).toContainText('交接班记录')
+  await expect(sheet).toContainText(handover.summary)
+  await expect(sheet).toContainText('不含住客证件、电话等敏感资料')
+  await page.emulateMedia({ media: null })
+  await expect(sheet).toBeHidden()
+})
+test('390px手机端列表与详情可操作，无整页横向溢出', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await login(page)
+  await page.goto('/handovers')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await record(page, fixtures.draft!.id).click()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await expect(page.getByRole('button', { name: '编辑草稿', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '打印交接单', exact: true }).click()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: '../.local/handovers-mobile.png', animations: 'disabled' })
+})
+test('操作记录按模块展示交接班动作', async ({ page }) => {
+  await login(page, 'HOTEL_MANAGER')
+  await page.goto('/audit-logs')
+  await page.getByRole('combobox', { name: '审计业务模块', exact: true }).click()
+  await page.getByRole('option', { name: '交接班', exact: true }).click()
+  await page.getByRole('button', { name: '查询操作记录', exact: true }).click()
+  const first = page.getByRole('button', { name: /查看操作记录/ }).first()
+  await expect(first).toBeVisible()
+  await expect(first).toContainText(/创建交班草稿|修改交班草稿|提交交班|确认接班|改派接班人/)
+})

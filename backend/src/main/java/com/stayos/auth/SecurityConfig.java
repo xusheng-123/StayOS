@@ -44,6 +44,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/stays", "/api/stays/**").authenticated()
                 .requestMatchers("/api/audit-logs", "/api/audit-logs/**").authenticated()
                 .requestMatchers("/api/operations/**").authenticated()
+                .requestMatchers("/api/handovers", "/api/handovers/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors
