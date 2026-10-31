@@ -29,7 +29,8 @@ class HandoverSchemaTest {
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement()) {
                 q.execute("insert into users(id,username,password_hash,display_name) values(900001,'legacy_handover','"+new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4).encode("fictional-password")+"','虚构旧版员工')");
             }
-            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);flyway.validate();
+            // From V14 two migrations apply since V2.0: V15 (handovers) and V16 (billing foundation).
+            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);flyway.validate();
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement();var r=q.executeQuery(
                 "select count(*) from information_schema.tables where table_schema='public' and table_name in ('shift_handovers','handover_items','handover_events')")) {
                 r.next();assertThat(r.getInt(1)).isEqualTo(3);

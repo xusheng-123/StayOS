@@ -20,6 +20,7 @@ public class AuditQuery {
         "CONFIGURATION", List.of("ROOM_CREATE","ROOM_UPDATE","ROOM_SET_ENABLED","ROOM_TYPE_CREATE","ROOM_TYPE_UPDATE","ROOM_TYPE_SET_ENABLED"),
         "STAY", List.of("CHECK_IN","CHECK_OUT","ROOM_CHANGE","STAY_EXTEND","GUEST_CORRECT"),
         "HANDOVER", List.of("HANDOVER_CREATE","HANDOVER_UPDATE","HANDOVER_SUBMIT","HANDOVER_REASSIGN","HANDOVER_ACKNOWLEDGE"),
+        "BILLING", List.of("FOLIO_OPEN","FOLIO_CLOSE","FOLIO_REOPEN","CHARGE_POST","CHARGE_ADJUST","PAYMENT_RECEIVE","PAYMENT_REFUND","SERVICE_ORDER_CREATE","SERVICE_ORDER_UPDATE","SERVICE_ORDER_FULFILL","SERVICE_ORDER_CANCEL","BILLING_POLICY_UPDATE","BILLING_RATE_PLAN_UPDATE","BILLING_RATE_DAY_UPDATE","BILLING_CATALOG_UPDATE"),
         "HOUSEKEEPING", List.of("HK_MANUAL_CREATE","HK_CLAIM","HK_ASSIGN","HK_REASSIGN","HK_START","HK_COMPLETE"),
         "ISSUE", List.of("ISSUE_REPORT","ISSUE_START","ISSUE_RESOLVE","ISSUE_SEVERITY"),
         "MAINTENANCE", List.of("MAINTENANCE_STOP","MAINTENANCE_RESUME")
@@ -43,7 +44,7 @@ public class AuditQuery {
         var permissions=RolePermissions.permissions(users.roles(actor));
         var result=new TreeMap<String,List<String>>();
         if(permissions.contains("audit:management")) for(String m:List.of("SECURITY","ACCOUNT","CONFIGURATION")) result.put(m,MODULES.get(m));
-        if(permissions.contains("audit:business")) for(String m:List.of("STAY","HANDOVER","HOUSEKEEPING","ISSUE","MAINTENANCE","CONFIGURATION")) result.put(m,MODULES.get(m));
+        if(permissions.contains("audit:business")) for(String m:List.of("STAY","HANDOVER","BILLING","HOUSEKEEPING","ISSUE","MAINTENANCE","CONFIGURATION")) result.put(m,MODULES.get(m));
         if(permissions.contains("audit:housekeeping")) for(String m:List.of("HOUSEKEEPING","ISSUE","MAINTENANCE")) result.put(m,MODULES.get(m));
         if(result.isEmpty()) throw new ApiException(403,"FORBIDDEN","没有集中操作记录查看权限");
         return result;

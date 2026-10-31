@@ -38,6 +38,12 @@ public class ApiErrors {
         else if (detail != null && detail.contains("uq_room_type_code")) { code="ROOM_TYPE_CODE_EXISTS"; message="房型编码已存在，请使用其他编码"; }
         else if (detail != null && detail.contains("uq_room_active_segment")) { code="ROOM_NOT_AVAILABLE"; message="房间已被其他操作占用，请刷新后重试"; }
         else if (detail != null && detail.contains("uq_room_open_cleaning_task")) { code="TASK_ALREADY_EXISTS"; message="该房间已有未完成的清洁任务，请查看原任务"; }
+        else if (detail != null && detail.contains("uq_folio_charge_source")) { code="CHARGE_ALREADY_POSTED"; message="同一来源只能入账一次，请刷新客账核对"; }
+        else if (detail != null && detail.contains("folios_stay_record_id_key")) { code="FOLIO_ALREADY_EXISTS"; message="该入住已有客账，请刷新后查看"; }
+        else if (detail != null && detail.contains("uq_payment_reference")) { code="PAYMENT_REFERENCE_EXISTS"; message="相同外部参考的收款已登记，请核对后重试"; }
+        else if (detail != null && detail.contains("uq_billing_policy_active")) { code="POLICY_ACTIVE_CONFLICT"; message="生效政策正在被其他操作修改，请刷新后重试"; }
+        else if (detail != null && detail.contains("rate_plans_room_type_id_plan_code_key")) { code="RATE_PLAN_CODE_EXISTS"; message="该房型下方案编码已存在，请使用其他编码"; }
+        else if (detail != null && detail.contains("service_catalog_item_code_key")) { code="ITEM_CODE_EXISTS"; message="价目项目编码已存在，请使用其他编码"; }
         return ResponseEntity.status(409).body(ApiResponse.error(code,message));
     }
     @ExceptionHandler({org.springframework.dao.TransientDataAccessException.class,

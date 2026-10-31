@@ -173,9 +173,10 @@ class HandoverIntegrationTest {
         assertThat(b.get("/api/handovers/candidates?scope=FRONT_DESK").statusCode()).isEqualTo(frontAllowed?200:403);
         // Users without any handover permission are refused at the entry; scoped users get field validation.
         assertThat(b.get("/api/handovers?scope=SCHEDULERS").statusCode()).isEqualTo(frontAllowed||hkAllowed?400:403);
-        // A front-desk handover is invisible to the housekeeping scope even in listings.
+        // A front-desk handover is invisible to the housekeeping scope even in listings (structural id check,
+        // not a substring test: numeric ids like 112 contain "12" as text).
         var hkList=ok(hk.get("/api/handovers?scope=HOUSEKEEPING"));
-        assertThat(hkList.path("items").toString()).doesNotContain(frontHandover.path("id").toString());
+        for(var item:hkList.path("items")) assertThat(item.path("id").asLong()).isNotEqualTo(frontHandover.path("id").asLong());
     }
     @Test void receiverValidationRejectsDisabledMissingPermissionAndSelf()throws Exception {
         var front=login("FRONT_DESK");long staff=ids.get("HOUSEKEEPING_STAFF"),admin=ids.get("ADMIN"),self=ids.get("FRONT_DESK");

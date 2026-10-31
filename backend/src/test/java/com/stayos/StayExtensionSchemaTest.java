@@ -29,7 +29,7 @@ class StayExtensionSchemaTest {
                 q.execute("insert into users(id,username,password_hash,display_name) values(900001,'legacy_extension','"+new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4).encode("fictional-password")+"','虚构旧版员工')");
                 q.execute("insert into stay_records(id,check_in_at,expected_check_out_at,created_by,notes) values(900001,'2026-01-01T01:00:00Z','2026-01-02T01:00:00Z',900001,'legacy snapshot')");
             }
-            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);flyway.validate();
+            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);flyway.validate();
             assertThat(db.queryForObject("select count(*) from information_schema.tables where table_schema='public' and table_name in ('shift_handovers','handover_items','handover_events')",Integer.class)).isEqualTo(3);
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement();var r=q.executeQuery("select version,notes,expected_check_out_at from stay_records where id=900001")) {
                 assertThat(r.next()).isTrue();assertThat(r.getLong(1)).isZero();assertThat(r.getString(2)).isEqualTo("legacy snapshot");

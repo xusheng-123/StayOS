@@ -21,4 +21,11 @@ public class BusinessActorGuard {
         if(!RolePermissions.permissions(users.roles(actor)).contains(permission))
             throw new ApiException(403,"ACCESS_DENIED","当前账号没有执行此操作的权限");
     }
+    /** Lock-free check for read-only transactions, where SELECT FOR UPDATE is not permitted. */
+    public void requireRead(long actor,String permission) {
+        var user=users.selectById(actor);
+        if(user==null || !user.enabled) throw new ApiException(403,"ACCOUNT_UNAVAILABLE","账号状态已变化，请重新登录");
+        if(!RolePermissions.permissions(users.roles(actor)).contains(permission))
+            throw new ApiException(403,"ACCESS_DENIED","当前账号没有执行此操作的权限");
+    }
 }

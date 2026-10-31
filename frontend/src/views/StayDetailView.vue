@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { ElDescriptions, ElDescriptionsItem } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { ElDescriptions, ElDescriptionsItem, ElMessage } from 'element-plus'
 import { api } from '../api/client'
 import { localTime } from '../api/rooms'
+import { folioByStay } from '../api/billing'
 import { can } from '../stores/auth'
 import RoomChangeDialog from '../components/RoomChangeDialog.vue'
 import CheckoutDialog from '../components/CheckoutDialog.vue'
@@ -13,7 +14,7 @@ import GuestCorrectionHistory from '../components/GuestCorrectionHistory.vue'
 import StayExtensionHistory from '../components/StayExtensionHistory.vue'
 import { changeReasonNames } from '../types/stay'
 import type { Stay } from '../types/stay'
-const route = useRoute(), stay = ref<Stay | null>(null), error = ref(''), loading = ref(false)
+const route = useRoute(), router = useRouter(), stay = ref<Stay | null>(null), error = ref(''), loading = ref(false), folioBusy = ref(false)
 const documentNames = { ID_CARD: '居民身份证', PASSPORT: '护照', OTHER: '其他证件' }
 const roomChange = ref<InstanceType<typeof RoomChangeDialog> | null>(null), checkout = ref<InstanceType<typeof CheckoutDialog> | null>(null)
 const extension = ref<InstanceType<typeof StayExtensionDialog> | null>(null)
@@ -26,9 +27,17 @@ async function load() {
   finally { if (current === generation) loading.value = false }
 }
 watch(() => route.params.id, () => void load(), { immediate: true })
+// Billing entry: fetch the stay's folio and jump to it; without one, say so instead of opening the ledger silently.
+async function openFolio() {
+  if (!stay.value || folioBusy.value) return
+  folioBusy.value = true
+  try { const folio = await folioByStay(stay.value.id); await router.push(`/billing/folios/${folio.folio.id}`) }
+  catch (cause) { ElMessage.info(cause instanceof Error ? cause.message : '客账尚未开立') }
+  finally { folioBusy.value = false }
+}
 </script>
 <template>
-  <section class="rooms-page stay-page"><div class="page-heading"><div><p class="eyebrow muted">STAY DETAILS</p><h1>入住详情</h1><p class="subtle">证件与电话仅展示脱敏信息。</p></div><div class="heading-actions"><template v-if="stay?.status === 'IN_HOUSE' && can('stay:manage')"><el-button type="primary" @click="roomChange?.open(stay)">办理换房</el-button><el-button @click="checkout?.open(stay)">办理退房</el-button></template><router-link to="/stays"><el-button>返回当前入住</el-button></router-link><router-link to="/rooms"><el-button>查看房态图</el-button></router-link><el-button :loading="loading" @click="load">刷新详情</el-button></div></div>
+  <section class="rooms-page stay-page"><div class="page-heading"><div><p class="eyebrow muted">STAY DETAILS</p><h1>入住详情</h1><p class="subtle">证件与电话仅展示脱敏信息。</p></div><div class="heading-actions"><template v-if="stay?.status === 'IN_HOUSE' && can('stay:manage')"><el-button type="primary" @click="roomChange?.open(stay)">办理换房</el-button><el-button @click="checkout?.open(stay)">办理退房</el-button></template><el-button v-if="can('billing:read')" :loading="folioBusy" @click="openFolio">查看客账</el-button><router-link to="/stays"><el-button>返回当前入住</el-button></router-link><router-link to="/rooms"><el-button>查看房态图</el-button></router-link><el-button :loading="loading" @click="load">刷新详情</el-button></div></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <div v-if="stay?.status === 'IN_HOUSE' && can('stay:manage')" class="heading-actions extension-entry"><el-button @click="extension?.open(stay)">办理续住</el-button><span class="subtle">调整预计离店计划，继续使用当前入住。</span></div>
     <div v-loading="loading" class="catalog-panel stay-section"><template v-if="stay"><div class="table-caption"><h2>{{ stay.roomNumber }} · {{ stay.roomTypeName }}</h2><el-tag>{{ stay.status === 'IN_HOUSE' ? '在住' : '已退房' }}</el-tag></div>

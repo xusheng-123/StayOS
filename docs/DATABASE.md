@@ -370,3 +370,25 @@ idempotency_requests 新增 result_assignment_batch_id，与原 result_stay_id/r
 新增只追加 `guest_corrections`：入住/住客组合外键、住客新版本唯一、员工/原因/服务器时刻、changed_fields、脱敏 before_summary/after_summary JSONB、加密 before_ciphertext/after_ciphertext。完整四字段快照以 `StayOS/v1/guest-correction` AAD 加密，每次随机 IV；现有 document/phone AAD 不变。普通查询不选密文。触发器核验在住、版本、操作时刻和脱敏当前投影一致性。索引 `(stay_record_id,guest_id,id DESC)`。
 
 幂等新增 `GUEST_CORRECT` 和 `result_guest_correction_id` FK，保留旧操作全部结果类型约束。运行角色显式增加 guests UPDATE、guest_corrections INSERT，历史更正表仍无 UPDATE/DELETE。更正不更新入住版本，不改变房间/使用段/同住关联/清洁任务。入住锁保证与退房/换房串行；同入住所有住客 ID 升序加锁保证重复证件校验。
+
+## V1.3 补登记：V15 交班表
+
+V1.3 当时漏登记本文件，这里补记；完整不变式见 [V1.3 交付记录](releases/V1.3-DELIVERY.md)。`V15__shift_handovers.sql` 新增 `shift_handovers`（范围 FRONT_DESK/HOUSEKEEPING、交班人/接班人、班次起止、状态 DRAFT/SUBMITTED/ACKNOWLEDGED 及状态-时间戳触发器不变式）、`handover_items`（每单最多 50 条、UNIQUE(handover_id,position)）、`handover_events`（状态事件 + 原因 + detail JSONB）。三表只追加或受限更新，不含住客证件/电话；幂等表扩 `result_handover_id` 与 HANDOVER_CREATE/SUBMIT/ACKNOWLEDGE 操作。
+
+## V2.0 / V16 增量：账务基础
+
+`V16__billing_foundation.sql` 按开发手册第 11 节建账务底座。单币种 CNY；金额一律正数 `NUMERIC(18,2)`，方向单独存列；费用、收退款、事件为只追加事实，历史价格只以快照存在；**任何账务表不复制住客身份资料**。
+
+- `billing_policies`：版本化财务政策（日切、退房时限、早到/晚退/提前退房/换房差价/续住定价模式）。偏导唯一索引 `uq_billing_policy_active` 保证同时只有一个生效版本；无生效版本时服务层拒绝开账。
+- `rate_plans`：房型未来价目（同房型编码唯一），`room_rate_days` 按日覆盖价（UNIQUE(rate_plan_id,stay_date)）。改价只影响之后入账。
+- `service_catalog` / `service_orders` / `service_order_items`：价目、每次入住的消费请求（REQUESTED/FULFILLED/CANCELLED 及状态-操作人触发器不变式）、条目名称与单价快照（UNIQUE(order_id,catalog_item_id)）。只有履约生成唯一费用来源，取消不计费。
+- `folios`：一次入住一账（UNIQUE(stay_record_id)），状态 OPEN/CLOSED 与账务 version 独立于入住状态；`pricing_status=PRICING_REQUIRED` 标记 V1 历史接入（不回填），`charges_effective_from` 记录确认接入日。
+- `folio_charges`：追加费用/贷项/冲正事实。`source_type IN ('ROOM_NIGHT','SERVICE_ORDER','MANUAL','CREDIT','REVERSAL')`；CHECK 强制 `(source_type='CREDIT')⇔(category='CORRECTION')`、`(source_type='REVERSAL')⇔(category='REVERSAL')`、`direction='CREDIT'` 当且仅当 `reversal_of` 非空、`quantity*unit_price_snapshot=amount`；房费行关联 `room_segment_id` 与营业日。触发器 + 权限双重只追加。
+- `payment_records`：人工实收/实退，方式（现金/银行卡/扫码/转账/其他）、用途（PAYMENT 抵扣应收 / DEPOSIT 预收押金）、退款指向原收款（`refund_of`）、外部参考。部分唯一索引：非现金同客账同方向同方式同参考号防重，现金不要求全局唯一单号。
+- `folio_events`：开账、结账、重开等状态事件，不删除历史费用/流水。
+
+金额规则：`净应收 = 费用 − 有效贷项`，`净实收 = 收款 − 退款`，余额正数为未付、负数为预收剩余；押金/预收是一笔收款的用途，不另记收入。普通退款额度 = min(该笔收款未退部分，当前预收余额)，由服务层在客账 `FOR UPDATE` 锁内校验，数据库约束兜底。
+
+幂等扩展：`idempotency_requests` 增加 `result_folio_id/result_folio_charge_id/result_service_order_id/result_payment_record_id` 与 FOLIO_OPEN/FOLIO_CLOSE/FOLIO_REOPEN/CHARGE_POST/CHARGE_ADJUST/PAYMENT_RECEIVE/PAYMENT_REFUND/SERVICE_ORDER_CREATE/SERVICE_ORDER_UPDATE/SERVICE_ORDER_FULFILL/SERVICE_ORDER_CANCEL 操作；CHECK 约束按结果类型互斥（预约时允许结果列为空，与 V15 模式一致）。`deploy/runtime-grants.sql` 为受限运行角色补账务表 INSERT 与配置表 UPDATE，费用/流水/事件仍无 UPDATE/DELETE 权限。
+
+当前最高迁移 **V16**，下一号 V17。迁移计数断言已更新：HandoverSchemaTest 期望 2 个新迁移（V15+V16）。

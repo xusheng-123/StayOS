@@ -455,3 +455,43 @@ reasonType 为 GUEST_REQUEST/ROOM_ISSUE/OTHER，说明必填；ROOM_ISSUE 的 is
 - 写事务先预留幂等，再复核真实操作人，锁入住和按 ID 排序的住客快照；与退房/换房串行。版本不匹配 409 `STALE_GUEST_VERSION`，已退房 409，错误入住/住客 404；参数无效 400。
 - 重放返回原始脱敏回执；24 小时过期 key 不自动复用。业务事实、当前投影、审计 `GUEST_CORRECT` 和回执指针共同提交/回滚。
 - 浏览器只持久化 UUID。关闭时清空敏感输入及内存 payload；重开/刷新查询回执，绝不自动用新 key 重发。
+
+## V1.3 补登记：非财务交班
+
+V1.3 当时漏登记本文件，这里补记接口边界；完整规则与验收见 [V1.3 交付记录](releases/V1.3-DELIVERY.md)。权限 `handover:front-desk`（前台/总经理）、`handover:housekeeping`（客房主管/总经理），使用既有 Session、CSRF、幂等与审计。
+
+- `GET/POST /api/handovers`、`GET /api/handovers/result/{key}?operation=`、`GET /api/handovers/candidates?scope=`、`GET/PUT /api/handovers/{id}`、`POST /api/handovers/{id}/submit|reassign|acknowledge`。
+- 状态机 DRAFT→SUBMITTED→ACKNOWLEDGED，数据库触发器冻结；事项只存 category/content/sourceId，不含住客证件或电话。
+
+## V2.0 账务基础接口
+
+按开发手册第 11 节实现；权限 `billing:read|charge|receive`（前台/总经理）、`billing:adjust|refund|configure`（仅总经理）；客房岗位与系统管理员无账务权限。金额一律十进制字符串（两位小数），单币种 CNY；`净应收 = 费用 − 有效贷项`，`净实收 = 收款 − 退款`，余额正数未付、负数预收剩余。所有写操作带 UUID `Idempotency-Key`，24 小时内同键同内容返回原回执；全部写路径有权限、版本乐观锁、审计与幂等。
+
+### 价目与政策维护（billing:configure）
+
+| 方法与路径 | 输入/输出 | 规则 |
+| --- | --- | --- |
+| `GET /api/billing/policies` | `{active,history}`；无政策时 active 为 null | history 只含已归档版本 |
+| `POST /api/billing/policies` | `{billingCutoffTime,checkoutDeadline?,earlyCheckinMode,lateCheckoutMode,earlyCheckoutMode,roomChangePriceMode,extensionPriceMode,notes?}` | 发布新版本并自动归档旧版本；同时仅一个生效版本 |
+| `GET/POST /api/billing/rate-plans`、`PUT /api/billing/rate-plans/{id}` | 房型、编码、名称、门市价、启用 | 同房型编码唯一；改价只影响之后入账 |
+| `GET/POST /api/billing/rate-plans/{id}/rate-days` | `{stayDate,nightlyPrice}` 列表 | 特殊日价覆盖该日门市价，重复保存即覆盖 |
+| `GET/POST /api/billing/service-catalog`、`PUT /api/billing/service-catalog/{id}` | 编码、名称、计价单位（按份/按次）、单价 | 编码全局唯一 |
+
+### 客账与动作
+
+| 方法与路径 | 规则 |
+| --- | --- |
+| `GET /api/billing/folios?status=&page=&pageSize=` | 客账分页列表（应收/实收/余额分项） |
+| `GET /api/folios/{id}` | 客账详情：汇总、费用、收退款、事件；金额分项展示，不合成"收入" |
+| `GET/POST /api/stays/{id}/folio` | 查询该入住客账；受控开账（需生效政策版本，一入住一账） |
+| `POST /api/folios/{id}/charges` | `{category:ROOM_NIGHT\|MANUAL,...}`；房费按营业日覆盖的住房段核对方型与当日价，手工费用存名称/单价/数量快照；费用只增不改 |
+| `POST /api/folios/{id}/adjustments` | `{originalChargeId,mode:CORRECTION\|REVERSAL,amount?,reason}`；更正形成 CREDIT 贷项，全额冲正形成 REVERSAL；累计不超过原费用 |
+| `POST /api/folios/{id}/payments` | `{method,purpose:PAYMENT\|DEPOSIT,amount,methodReference?,note?}`；非现金同凭证号防重，现金不要求全局唯一单号 |
+| `POST /api/folios/{id}/refunds` | `{paymentRecordId,amount,reason}`；不超过该笔收款未退部分与当前预收余额的较小者，客账行锁 + 数据库约束防并发超退 |
+| `POST /api/folios/{id}/close`、`POST /api/folios/{id}/reopen` | 结账带版本与是否带余额结转确认；重开需原因（billing:adjust），仅 CLOSED 可重开 |
+| `GET/POST /api/stays/{id}/service-orders`、`PUT /api/service-orders/{id}` | 消费请求登记/修改；按价目快照记名与价 |
+| `POST /api/service-orders/{id}/fulfill`、`POST /api/service-orders/{id}/cancel` | 实际提供后才履约入账（唯一费用来源 SERVICE_ORDER）；取消不产生费用，履约/取消各一次性 |
+
+回执与详情不含住客证件、电话；账务表不复制住客身份资料。普通收据明确标注为酒店内部凭证，不代表法定发票；系统不接入真实自动支付。`/api/folios/result/{key}` 查询本人幂等回执。
+
+主要错误码：`BILLING_POLICY_REQUIRED`（无生效政策）、`FOLIO_REQUIRED`/`FOLIO_NOT_OPENED`/`FOLIO_STATE`（客账不存在或状态不符）、`RATE_PLAN_NOT_FOUND`（价目不存在或不适用，含他房型方案）、`RATE_PLAN_DISABLED`、`NO_ROOM_SEGMENT`（该营业日无覆盖住房段）、`CHARGE_ALREADY_POSTED`/`CHARGE_BEFORE_EFFECTIVE`/`ZERO_AMOUNT_CHARGE`/`CREDIT_EXCEEDS_CHARGE`/`NOTHING_TO_CREDIT`（费用与调整边界）、`REFUND_EXCEEDS_LIMIT`/`NOTHING_TO_REFUND`（退款额度）、`OUTSTANDING_BALANCE`（余额未确认）、`STALE_VERSION`（版本冲突）。一入住一账由 `folios.stay_record_id` 唯一约束保证（冲突返回 `FOLIO_ALREADY_EXISTS`）；非现金同凭证号防重由部分唯一索引保证（同客账、同方向、同方式、同参考号，现金除外，冲突返回 `PAYMENT_REFERENCE_EXISTS`）；同来源重复入账返回 `CHARGE_ALREADY_POSTED`，政策并发发布返回 `POLICY_ACTIVE_CONFLICT`。
