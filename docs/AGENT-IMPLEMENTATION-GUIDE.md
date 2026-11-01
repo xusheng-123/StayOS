@@ -562,7 +562,7 @@ git diff --check
 | V3.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r2：JUnit 482、浏览器 14 套 148 项全通过（auth 1 项波动经 r3 重跑通过）及构建打包；V3.0-DELIVERY.md |
 | V4.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署；真实供应商接入另需条件 | r1：JUnit 498、浏览器 15 套 150 项全通过（一次通过无重跑）、前后端构建打包；V4.0-DELIVERY.md |
 | V4.1/V4.2 | DEFERRED | 直订/真实支付需明确启用及供应商 | 本文第 15 节 |
-| V5.0 | WAITING_DEPENDENCY | 主线已至 V4.0；等用户授权并选择经营闭环 | 本文第 16 节 |
+| V5.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署；批量导出/营销/会员等未做 | r1：JUnit 514、浏览器 15 套 139 项全通过（0 unexpected，含客历 2 项；按 Playwright JSON 实测汇总）、前后端构建打包；V5.0-DELIVERY.md |
 | V6.0 | DEFERRED | 实际第二店/SaaS 目标后安排 | 本文第 17 节 |
 
 ### 本版工作卡模板
@@ -585,14 +585,15 @@ git diff --check
 
 ## 21. 最近交接记录
 
-### 2026-11-01：V4.0 首个获授权渠道连接完成并提交 Git
+### 2026-11-01：V5.0 有限客历完成并提交 Git
 
-- 经用户授权"去做V4.0"，按第 14 节完成全部阶段；V3.0 详细交接移至 `docs/releases/V3.0-DELIVERY.md`（V2.1 `e8d8df2`、V3.0 `51c9591` 已经用户授权推送远程）。供应商条件如实核实：用户未指定首个真实供应商，无接口权限/正式文档/沙箱账号 → 走第 14 节回退路径，完成供应商无关核心 + adapter SPI + 受控模拟供应商 `SIMULATOR`（HMAC-SHA256 签名回调 + 内存台账回显推送），真实供应商保持 `BLOCKED_EXTERNAL`，不宣称任何真实渠道端到端集成通过。
-- 迁移 V19 新增 6 张表：`channel_connections`（凭据/回调密钥只存引用名，状态含 ACTIVE/PAUSED/BLOCKED_EXTERNAL，乐观锁 `version`）、`channel_mappings`（渠道编码↔本地房型/价格计划，双唯一）、`inbound_events`（(connection, external_event_id) 唯一、每连接序号协议、PENDING 部分索引、result_reservation_id 追溯）、`outbox_events`（7 类事件、SENT/sent_at 一致性 CHECK）、`sync_attempts`（追加只写流水，grants 不授 UPDATE/DELETE）、`reconciliation_runs`（RUNNING/finished_at 一致性 CHECK、差异 JSONB）；`deploy/runtime-grants.sql` 同步；权限 `channel:manage`（仅总经理）；审计新增 CHANNEL 模块 9 动作。
-- 核心规则：入站"先持久化后处理"——签名失败 401 不落任何内容、重复 409 `DUPLICATE_EVENT`、乱序记 `OBSOLETE` 事实（每连接已结算序号水位）、坏负载 400；`ORDER_CREATE/MODIFY/CANCEL` 全部经共享 `ReservationService`（幂等键为事件身份派生 `UUID.nameUUIDFromBytes`；拒绝跨渠道操作他人预订）；PRICE_UPDATE 只落事实不自动改价（V4.x 条件版）；失败退避 attempts²×2s（上限 600s）、`MAX_ATTEMPTS=8` 转 `MANUAL` 等人工重试；出站按 id 有序领取（`for update skip locked`、Worker 每 5s）、`PAUSED/BLOCKED_EXTERNAL` 跳过、推送在业务事务外；柜台预订确认/修改/取消经 `ChannelOutboxRecorder`（`@Transactional(MANDATORY)` 与业务同事务）自动入队，无渠道出身的操作不入队；对账按外部单号比对本地/远端差异落明细；回调路径免登录但受每连接密钥签名保护，CSRF 仅对回调精确豁免（全局不关闭）；凭据引用经 `CredentialResolver`（系统属性→环境变量→Spring Environment）解析，不可解析 409，密钥值不入库不进日志/审计，错误文本经 `briefCause` 截断不含负载值与 PII。
-- 关键修复（实测发现）：幂等表仅收 UUID，直接拼事件键被拒（改派生 UUID）；`ORDER_CREATE` 的 CONFIRMED 出站须在 applyInbound 显式补发（`result_reservation_id` 在事件事务后才落库，MODIFY/CANCEL 交给服务钩子避免重复入队）；`recordReservationEvent` 用 `queryForList`（原 `queryForObject` 会让无渠道出身的柜台操作 500）；MyBatis 动态 SQL claim 查询补 `<script>` 包裹；JSONB 边界统一"字符串进、`::text` 出"（`JsonNode` 直接绑定失败）；`channel_connections` 冻结前补 `version` 列（测试库重放）；连接/映射四个写动作补 `audit.success`（浏览器验收暴露）；测试清库 FK 顺序（幂等→渠道表→预订→房间→用户）。
-- 有效验收证据：`.local/releases/V4.0/20261101-1043/`（r1 全量 `test.ps1 -Browser` 一次通过无重跑：JUnit 498 项 0 失败 0 错误 0 跳过，含 `ChannelSchemaTest` 8、`ChannelIntegrationTest` 8；浏览器 15 套 150 项全通过 0 unexpected，含新增 channels.spec.ts 2 项；前后端构建打包通过；`git diff --check` 干净）。当前最高迁移 V19，下一号 V20。
-- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V4.0 接口与表结构；详细交接见 `docs/releases/V4.0-DELIVERY.md`。下一行动：V4.1/V4.2（直订/真实支付）保持 DEFERRED，待用户明确启用与供应商条件；V5.0 等用户授权并选择经营闭环范围；本版提交本地 Git 后，2026-11-01 用户明确授权"推送远程"，提交 `2e2b70d` 已推送远程（`cd21264..2e2b70d`）。
+- 经用户授权"去做V5.0"，经选项确认选择第 16 节首选闭环"有限客历"（协议客户/简单会员/营销未授权）；按 DISCOVER → CONTRACT → DATA → BACKEND → FRONTEND → INTEGRATE → VERIFY → HANDOFF 完成。V4.0 详细交接移至 `docs/releases/V4.0-DELIVERY.md`（含 `2e2b70d` 已推送远程记录；`ba4fda1` 为推送留痕提交，留在本地待下次授权一并推送）。
+- 迁移 V20（已冻结）2 表 + 幂等扩展：`customer_profiles`（姓名仅展示与人工核对；证件/电话沿用 GuestProtection AES-GCM 密文+掩码；status ACTIVE/DISABLED/MERGED；`version` 乐观锁 `DEFAULT 1 CHECK(version>=1)`；合并终态与拒绝 DELETE 由两个触发器在库层兜底，命名 CHECK：状态白名单、merge_target、merge_state）、`customer_profile_stays`（profile/stay/guest 三 FK 全 RESTRICT，`guest_id` 唯一——一次登记的每个住客快照最多属于一个档案）；`idempotency_requests` 增 `result_customer_profile_id` 与 6 个 CUSTOMER_PROFILE_* 操作；`runtime-grants.sql` 不授档案 DELETE。
+- 核心规则：客历主数据与入住登记快照完全分离，关联是引用不是复制，解除关联不动历史；同名/共用手机号绝不自动认定同一人——建档响应携带 `similarActiveProfiles` 提示（≤5 条）供人工核对；合并仅 `customer:merge`（总经理），目标须 ACTIVE，合并=源置 MERGED+关联移交，源档案终态（编辑/状态/再合并 409 `PROFILE_MERGED`），错误合并的修正=解除关联后重新关联；档案详情每次访问留 `CUSTOMER_PROFILE_VIEW` 审计；7 动作入 CUSTOMER 审计模块（操作记录页已配中文名）。
+- 关键修复（集成测试实测发现，均为产品代码）：`SecurityConfig` 未配 `/api/customer-profiles/**` 被 `anyRequest().denyAll()` 全拒 403；`IdempotencyService` 结果种类 switch 漏 PROFILE 致重放 409 REQUEST_IN_PROGRESS；MyBatis 注解 SQL 中 HTML 实体（`&lt;&gt;`）仅在 `<script>` 内生效（3 处改字面 `<>`）；可空绑定参数需 `CAST(#{p} AS bigint)`（2 处）；`mergedInto` 查询列数与 MergedTarget 构造器不匹配致合并 500；V20 `version` 默认 0 与 `@Positive` 契约矛盾——冻结前改 `DEFAULT 1 CHECK(version>=1)` 并重放测试库；`ApiErrors` 校验失败补字段级日志（仅字段名+约束消息，不含被拒值）。
+- 有效验收证据：`.local/releases/V5.0/20261101-1333/`（r1 干净一轮 `test.ps1 -Browser`：JUnit 514 项 0 失败 0 错误 0 跳过——测试库自空库完整迁移 V1→V20，含 `CustomerProfileSchemaTest` 9、`CustomerProfileIntegrationTest` 7；迁移计数断言同步 Channel 2/Cashier 4/Billing 5/GuestCorrection 7/Housekeeping 12/Handover 6/Reservation 3/StayExtension 8/Operations 20，Operations 禁改清单新增 `delete from customer_profiles`；浏览器 15 套 139 项 0 unexpected 0 flaky 0 skipped，15 份 Playwright JSON 同目录，含新增 customers.spec.ts 2 项；vue-tsc 0 错误；前后端构建打包通过；`git diff --check` 干净）。当前最高迁移 V20，下一号 V21。
+- 过程记录（如实）：VERIFY 中一次全量回归被主动中断（迁移计数断言需随 V20 更新），该中断使上一轮 BootstrapTest 清理未执行、测试库遗留一个启用管理员，导致紧接的重启轮次 AuthIntegrationTest 末位管理员保护断言失败一次；重置测试库后干净全绿，属实施状态污染非产品缺陷。另自本版起浏览器项数以 Playwright JSON 实测汇总为准（V4.0 记录的 150 项当时未归档各套 JSON 无法复核）。
+- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V5.0 接口与表结构；详细交接见 `docs/releases/V5.0-DELIVERY.md`。下一行动：本版提交本地 Git（只提交不推送，推送需用户单独授权）；V4.1/V4.2 保持 DEFERRED；批量导出/营销/会员未做，候选需求等用户排期；V6.0 等实际第二店/SaaS 条件；开发容器（15432）仍运行旧代码，下次重启自动应用 V19+V20。
 
 后续交接每次替换“最近记录”，较早详细记录放对应 `docs/releases/`；不删除原始验收证据。
 

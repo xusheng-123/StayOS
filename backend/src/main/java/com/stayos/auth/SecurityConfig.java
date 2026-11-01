@@ -53,6 +53,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/cashier-shifts", "/api/cashier-shifts/**", "/api/business-days", "/api/business-days/**", "/api/reports", "/api/reports/**").authenticated()
                 .requestMatchers("/api/reservations", "/api/reservations/**", "/api/availability", "/api/inventory", "/api/inventory/**").authenticated()
                 .requestMatchers("/api/channels", "/api/channels/**").authenticated()
+                .requestMatchers("/api/customer-profiles", "/api/customer-profiles/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors

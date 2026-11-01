@@ -30,7 +30,7 @@ class ChannelSchemaTest {
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement()){
                 q.execute("insert into users(id,username,password_hash,display_name) values(900004,'legacy_channel','"+ENCODER.encode("fictional-password")+"','虚构旧版渠道')");
             }
-            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);flyway.validate();
+            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);flyway.validate();
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement();var r=q.executeQuery(
                 "select count(*) from information_schema.tables where table_schema='public' and table_name in "+
                 "('channel_connections','channel_mappings','inbound_events','outbox_events','sync_attempts','reconciliation_runs')")) {

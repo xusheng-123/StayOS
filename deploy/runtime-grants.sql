@@ -13,15 +13,18 @@ GRANT INSERT ON users, user_roles, room_types, rooms, guests, stay_records, stay
     business_days, cashier_shifts, cash_counts, daily_close_runs, daily_reports,
     reservations, reservation_events, inventory_days, inventory_blocks,
     channel_connections, channel_mappings, inbound_events, outbox_events, sync_attempts, reconciliation_runs,
+    customer_profiles, customer_profile_stays,
     audit_logs TO :"runtime_role";
 GRANT UPDATE ON users, room_types, rooms, stay_records, stay_room_segments, idempotency_requests,
     housekeeping_tasks, room_issues, room_maintenance_stops, shift_handovers,
     billing_policies, rate_plans, room_rate_days, service_catalog, folios, service_orders,
     business_days, cashier_shifts, daily_close_runs,
     reservations, inventory_days, inventory_blocks,
-    channel_connections, channel_mappings, inbound_events, outbox_events, reconciliation_runs TO :"runtime_role";
+    channel_connections, channel_mappings, inbound_events, outbox_events, reconciliation_runs,
+    customer_profiles TO :"runtime_role";
 -- sync_attempts stay append-only; inbound/outbox event rows are facts, mapping maintenance may remove a mapping.
-GRANT DELETE ON user_roles, service_order_items, channel_mappings TO :"runtime_role";
+-- Profile rows are never deleted (trigger enforced); fixing a wrong match removes the link row only.
+GRANT DELETE ON user_roles, service_order_items, channel_mappings, customer_profile_stays TO :"runtime_role";
 -- Reservation deposits move to their folio exactly once at folio opening; the payment trigger allows only this fill.
 GRANT UPDATE (folio_id) ON payment_records TO :"runtime_role";
 GRANT UPDATE (display_name, document_type, document_ciphertext, document_mask, phone_ciphertext, phone_mask, version)

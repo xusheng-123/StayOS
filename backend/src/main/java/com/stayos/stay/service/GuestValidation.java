@@ -2,10 +2,10 @@ package com.stayos.stay.service;
 
 import com.stayos.common.ApiException;
 
-/** Same registration field rules for check-in and controlled correction. */
-final class GuestValidation {
+/** Same registration field rules for check-in, controlled correction and guest profiles. */
+public final class GuestValidation {
     private GuestValidation() {}
-    static void require(String name,String type,String number,String phone) {
+    public static void require(String name,String type,String number,String phone) {
         if (name.isEmpty() || name.length()>100 || name.chars().anyMatch(Character::isISOControl)) throw invalid("请填写有效的住客姓名");
         boolean valid=switch(type) {
             case "ID_CARD"->number.matches("[0-9]{17}[0-9X]");

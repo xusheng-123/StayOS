@@ -24,6 +24,7 @@ public class AuditQuery {
         Map.entry("CASHIER", List.of("CASHIER_SHIFT_OPEN","CASHIER_SHIFT_SUBMIT","CASHIER_SHIFT_CONFIRM","BUSINESS_DAY_CLOSE")),
         Map.entry("RESERVATION", List.of("RESERVATION_CREATE","RESERVATION_MODIFY","RESERVATION_CONFIRM","RESERVATION_CANCEL","RESERVATION_EXPIRE_RELEASE","RESERVATION_NO_SHOW","RESERVATION_ASSIGN_ROOM","RESERVATION_CHECK_IN","RESERVATION_DEPOSIT_RECEIVE","RESERVATION_DEPOSIT_REFUND","INVENTORY_BLOCK_CREATE","INVENTORY_BLOCK_RELEASE")),
         Map.entry("CHANNEL", List.of("CHANNEL_CONNECTION_CREATE","CHANNEL_CONNECTION_UPDATE","CHANNEL_MAPPING_CREATE","CHANNEL_MAPPING_DELETE","CHANNEL_INBOUND_RETRY","CHANNEL_OUTBOX_RETRY","CHANNEL_PROCESS_NOW","CHANNEL_RECONCILE","CHANNEL_CALLBACK_SIGNATURE")),
+        Map.entry("CUSTOMER", List.of("CUSTOMER_PROFILE_CREATE","CUSTOMER_PROFILE_UPDATE","CUSTOMER_PROFILE_SET_STATUS","CUSTOMER_PROFILE_MERGE","CUSTOMER_PROFILE_STAY_LINK","CUSTOMER_PROFILE_STAY_UNLINK","CUSTOMER_PROFILE_VIEW")),
         Map.entry("HOUSEKEEPING", List.of("HK_MANUAL_CREATE","HK_CLAIM","HK_ASSIGN","HK_REASSIGN","HK_START","HK_COMPLETE")),
         Map.entry("ISSUE", List.of("ISSUE_REPORT","ISSUE_START","ISSUE_RESOLVE","ISSUE_SEVERITY")),
         Map.entry("MAINTENANCE", List.of("MAINTENANCE_STOP","MAINTENANCE_RESUME"))
@@ -47,7 +48,7 @@ public class AuditQuery {
         var permissions=RolePermissions.permissions(users.roles(actor));
         var result=new TreeMap<String,List<String>>();
         if(permissions.contains("audit:management")) for(String m:List.of("SECURITY","ACCOUNT","CONFIGURATION")) result.put(m,MODULES.get(m));
-        if(permissions.contains("audit:business")) for(String m:List.of("STAY","HANDOVER","BILLING","CASHIER","RESERVATION","CHANNEL","HOUSEKEEPING","ISSUE","MAINTENANCE","CONFIGURATION")) result.put(m,MODULES.get(m));
+        if(permissions.contains("audit:business")) for(String m:List.of("STAY","HANDOVER","BILLING","CASHIER","RESERVATION","CHANNEL","CUSTOMER","HOUSEKEEPING","ISSUE","MAINTENANCE","CONFIGURATION")) result.put(m,MODULES.get(m));
         if(permissions.contains("audit:housekeeping")) for(String m:List.of("HOUSEKEEPING","ISSUE","MAINTENANCE")) result.put(m,MODULES.get(m));
         if(result.isEmpty()) throw new ApiException(403,"FORBIDDEN","没有集中操作记录查看权限");
         return result;

@@ -568,3 +568,22 @@ V1.3 当时漏登记本文件，这里补记接口边界；完整规则与验收
 重试与人工处理：失败退避 `attempts²×2s`（上限 600s），`MAX_ATTEMPTS=8` 后转 `MANUAL` 停止自动重试；每次尝试落 `sync_attempts`（追加只写，含耗时与简短原因；不含负载/电话等敏感值）。出站业务变更与 outbox 写入同一本地事务；外部 HTTP 推送在所有业务事务之外；后台工作器每 5s 数据库有序领取（`for update skip locked`）。
 
 主要错误码：`CALLBACK_SIGNATURE_INVALID`、`DUPLICATE_EVENT`、`CALLBACK_MALFORMED`、`CALLBACK_EVENT_TYPE`、`CREDENTIAL_UNRESOLVED`、`MAPPING_EXISTS`、`STALE_VERSION`、`RESERVATION_STATE`、`NOT_FOUND`、`VALIDATION_ERROR`。
+
+## V5.0 有限客历接口
+
+按开发手册第 16 节实现"有限客历"闭环。核心原则：`customer_profiles` 是人工维护的客户主数据，与每次入住登记的即时快照（`guests`/`stay_guests`）保持分离；**姓名相同或共用手机号绝不自动认定同一人**——同名/同号只在创建时作为"待人工核对"提示返回（`similarActiveProfiles`，最多 5 条），合并与关联都由前台/总经理人工决策。档案证件/电话沿用 GuestProtection AES-GCM 加密与掩码，任何接口不返回明文；打开档案详情留访问审计（`CUSTOMER_PROFILE_VIEW`）。
+
+权限：`customer:read`（前台、总经理）读列表与详情；`customer:manage`（前台、总经理）建档/编辑/停用恢复/关联与解除关联；`customer:merge`（仅总经理）合并。客房等其余角色 URL 级拒绝。
+
+| 方法与路径 | 规则 |
+| --- | --- |
+| `GET /api/customer-profiles?query=&status=&page=&pageSize=` | 分页列表；`status` 默认 `ACTIVE`，可选 `DISABLED/MERGED/ALL`；`query` 按姓名包含匹配；只返回掩码 |
+| `GET /api/customer-profiles/{id}` | 详情（含合并目标摘要 `mergedInto`、关联入住 `stays`）；每次访问审计 `CUSTOMER_PROFILE_VIEW` |
+| `POST /api/customer-profiles` | `{name,documentType,documentNumber,phone?,notes?}`，必须带 `Idempotency-Key`；同键同内容重放返回原档案，同键不同内容 409 `IDEMPOTENCY_MISMATCH`；响应含同名启用档案提示 `similarActiveProfiles`（信息性提示，不做任何自动处理） |
+| `PUT /api/customer-profiles/{id}` | `{name,documentType,documentNumber,phone?,notes?,version}`；乐观锁：版本不符 409 `VERSION_CONFLICT`；证件/电话重录重新加密，不回显旧值 |
+| `POST /api/customer-profiles/{id}/set-status` | `{status: ACTIVE\|DISABLED}`；停用后不能再关联新入住（409 `PROFILE_DISABLED`），详情仍可读 |
+| `POST /api/customer-profiles/{id}/merge` | `{targetId}`，仅总经理；目标必须 `ACTIVE`（409 `PROFILE_NOT_ACTIVE`）、不能合并到自身（400）；源档案置 `MERGED` 并把已关联入住整体移交给目标档案；合并后源档案终态，不能再编辑/变更状态/再次合并（409 `PROFILE_MERGED`） |
+| `POST /api/customer-profiles/{id}/stays` | `{stayRecordId,guestId?}` 把一次入住登记挂到档案；`guestId` 缺省取该登记的主要住客；每次入住登记的每个住客快照最多属于一个档案（数据库唯一约束兜底）：同档案重复 409 `PROFILE_STAY_EXISTS`，住客已挂在其他档案 409 `GUEST_ALREADY_LINKED`；关联不改动入住记录本身 |
+| `POST /api/customer-profiles/stay-links/{linkId}/detach` | `{linkId}` 解除关联；只删关联行，入住历史保持完整可查；错误匹配的修正路径 = 解除后重新关联 |
+
+主要错误码：`PROFILE_NOT_FOUND`、`PROFILE_MERGED`、`PROFILE_NOT_ACTIVE`、`PROFILE_DISABLED`、`PROFILE_STAY_EXISTS`、`GUEST_ALREADY_LINKED`、`PROFILE_STAY_LINK_NOT_FOUND`、`STAY_NOT_FOUND`、`VERSION_CONFLICT`、`IDEMPOTENCY_KEY_REQUIRED`、`IDEMPOTENCY_MISMATCH`、`VALIDATION_ERROR`。审计动作：`CUSTOMER_PROFILE_CREATE/UPDATE/SET_STATUS/MERGE/STAY_LINK/STAY_UNLINK/VIEW`（操作记录页业务模块"客历档案"）。本版不做批量导出与营销能力（权限未定义即不存在）。

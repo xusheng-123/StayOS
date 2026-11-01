@@ -29,7 +29,7 @@ class CashierSchemaTest {
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement()){
                 q.execute("insert into users(id,username,password_hash,display_name) values(900002,'legacy_cashier','"+new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4).encode("fictional-password")+"','虚构旧版收银')");
             }
-            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);flyway.validate();
+            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);flyway.validate();
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement();var r=q.executeQuery(
                 "select count(*) from information_schema.tables where table_schema='public' and table_name in "+
                 "('business_days','cashier_shifts','cash_counts','daily_close_runs','daily_reports')")) {

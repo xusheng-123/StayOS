@@ -27,7 +27,16 @@ public class ApiErrors {
         org.springframework.validation.BindException.class,
         org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
         org.springframework.web.bind.MissingServletRequestParameterException.class})
-    ResponseEntity<?> validation(Exception ignored) { recordFailure(); return ResponseEntity.badRequest().body(ApiResponse.error("VALIDATION_ERROR", "请检查输入内容")); }
+    ResponseEntity<?> validation(Exception error) {
+        recordFailure();
+        if (error instanceof MethodArgumentNotValidException invalid) {
+            var fields = invalid.getBindingResult().getFieldErrors().stream()
+                .map(f -> f.getField() + ":" + f.getDefaultMessage()).toList();
+            // Field names and constraint messages only; never the rejected values.
+            log.warn("Request body validation failed fields={}", fields);
+        }
+        return ResponseEntity.badRequest().body(ApiResponse.error("VALIDATION_ERROR", "请检查输入内容"));
+    }
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<?> conflict(DataIntegrityViolationException error) {
         recordFailure();

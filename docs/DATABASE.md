@@ -437,3 +437,17 @@ V1.3 当时漏登记本文件，这里补记；完整不变式见 [V1.3 交付�
 测试：`ChannelSchemaTest` 8 项（从 V18 升级恰好 1 个迁移、6 表齐全、凭据引用列齐全且无密钥列、约束/索引名、非法事实拒写）。迁移计数断言更新：HousekeepingSchemaTest 11、HandoverSchemaTest 5、CashierSchemaTest 3、ReservationSchemaTest 2、StayExtensionSchemaTest 7、GuestCorrectionSchemaTest 6、BillingSchemaTest 4、OperationsInfrastructureTest 19（禁改清单新增 channel 四表的 delete/update）。
 
 当前最高迁移 **V19**，下一号 V20。
+
+## V5.0 / V20 增量：有限客历
+
+`V20__customer_profiles.sql` 按开发手册第 16 节建客历主数据（2 表 + 幂等扩展；档案行永久保留、靠状态与关联表达业务事实）：
+
+- `customer_profiles`：客户主数据。`display_name`（NOT NULL，姓名仅用于展示与人工核对，不是身份判定）、`document_type` CHECK `ID_CARD/PASSPORT/OTHER`、证件/电话沿用 GuestProtection 体系（`*_ciphertext` AES-GCM 密文 + `*_mask` 掩码 + `encryption_key_id`，明文永不入库）；`notes`；`status` CHECK `ACTIVE/DISABLED/MERGED`；`merged_into_id` 自引用 FK（RESTRICT）；`version` 乐观锁 `DEFAULT 1 CHECK (version>=1)`；`created_by` 引用操作人。命名 CHECK：`customer_profiles_status_check`、`customer_profiles_merge_target_check`（`merged_into_id IS NULL OR merged_into_id <> id`）、`customer_profiles_merge_state_check`（`MERGED ⇔ merged_into_id IS NOT NULL`）。两个触发器：`validate_customer_profile_transition`（合并终态：MERGED 后不可改状态、合并目标不可改，`USING ERRCODE='23514'`）与 `customer_profiles_no_delete`（拒绝 DELETE——修正错误匹配靠解除关联，不删主数据）。
+- `customer_profile_stays`：档案 ↔ 入住登记关联。`profile_id`/`stay_record_id`/`guest_id` 三个 FK 全 RESTRICT；`guest_id` **唯一约束**——同一次登记的每个住客快照最多属于一个档案（这是"另一个档案抢不走已挂住客"的数据库级兜底）；`associated_by` 记录操作人。解除关联只删本表行，入住与登记快照不受影响。
+- 幂等扩展：`idempotency_requests` 增列 `result_customer_profile_id`（FK RESTRICT），operation CHECK 追加 6 个客历操作（CREATE/UPDATE/SET_STATUS/MERGE/STAY_LINK/STAY_UNLINK），结果列一致性 CHECK 重建时保留全部既有种类约束。
+
+`deploy/runtime-grants.sql`：`customer_profiles`/`customer_profile_stays` 授 INSERT/SELECT/UPDATE，另对 `customer_profile_stays` 授 DELETE（解除关联）；**不授 `customer_profiles` 的 DELETE**（触发器同样拒绝，双重防线）。
+
+测试：`CustomerProfileSchemaTest` 9 项（从 V19 升级恰好 1 个迁移、旧入住/住客数据不受影响、命名 CHECK/触发器/唯一索引/FK、非法事实拒写：状态白名单、无目标 MERGED、自我合并、合并终态与目标不可变、拒绝 DELETE、一快照一档案）。迁移计数断言更新：ChannelSchemaTest 2、CashierSchemaTest 4、BillingSchemaTest 5、GuestCorrectionSchemaTest 7、HousekeepingSchemaTest 12、HandoverSchemaTest 6、ReservationSchemaTest 3、StayExtensionSchemaTest 8、OperationsInfrastructureTest 20（禁改清单新增 `delete from customer_profiles`）。
+
+当前最高迁移 **V20**，下一号 V21。
