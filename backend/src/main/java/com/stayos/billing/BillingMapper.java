@@ -24,7 +24,7 @@ public interface BillingMapper {
     class ChargeRow { public Long id,folioId,stayRecordId,roomSegmentId,policyVersion,ratePlanId,catalogItemId,reversalOf;
         public long actor; public LocalDate businessDate; public String direction,category,nameSnapshot,pricingUnitSnapshot,currency,sourceType,sourceKey,note,createdByName;
         public int quantity; public BigDecimal unitPriceSnapshot,amount; public OffsetDateTime createdAt; }
-    class PaymentRow { public Long id,folioId,refundOf,cashierShiftId; public long actor; public String direction,method,purpose,currency,methodReference,note,receivedByName;
+    class PaymentRow { public Long id,folioId,reservationId,refundOf,cashierShiftId; public long actor; public String direction,method,purpose,currency,methodReference,note,receivedByName;
         public BigDecimal amount; public OffsetDateTime receivedAt; }
     class EventRow { public Long id; public String eventType,actorName,note; public OffsetDateTime createdAt; }
     class SumRow { public BigDecimal charges,credits,receipts,refunds; }
@@ -193,6 +193,11 @@ public interface BillingMapper {
     SumRow paymentSums(long id);
     @Select("select coalesce(sum(amount),0) from payment_records where refund_of=#{receipt}")
     BigDecimal refundedTotal(long receipt);
+    // V3.0: reservation deposits join the folio at opening; the guarded trigger permits only this one fill per record.
+    @Select("select id from reservations where checked_in_stay_id=#{stayId}")
+    Long reservationOfStay(long stayId);
+    @Update("update payment_records set folio_id=#{folioId} where reservation_id=#{reservationId} and folio_id is null")
+    int migrateReservationDeposits(@Param("folioId") long folioId,@Param("reservationId") long reservationId);
 
     // ---------- folio events ----------
     @Insert("""

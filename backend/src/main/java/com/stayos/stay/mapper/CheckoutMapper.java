@@ -5,9 +5,9 @@ import java.time.OffsetDateTime;
 
 @Mapper
 public interface CheckoutMapper {
-    class LockedStay { public Long id; public String status; }
+    class LockedStay { public Long id; public String status; public java.time.OffsetDateTime expectedCheckOutAt; }
     class Segment { public Long id,roomId; public OffsetDateTime enteredAt; }
-    @Select("select id,status from stay_records where id=#{id} for update")
+    @Select("select id,status,expected_check_out_at from stay_records where id=#{id} for update")
     LockedStay lockStay(long id);
     @Select("select id,room_id,entered_at from stay_room_segments where stay_record_id=#{id} and exited_at is null")
     Segment current(long id);

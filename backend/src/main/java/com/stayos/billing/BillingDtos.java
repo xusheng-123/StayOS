@@ -29,7 +29,7 @@ public final class BillingDtos {
         if(value==null || !value.matches("([01][0-9]|2[0-3]):[0-5][0-9]")) throw new ApiException(400,"VALIDATION_ERROR",label+"时间格式须为 HH:mm");
         return LocalTime.parse(value+":00");
     }
-    static LocalDate businessDate(OffsetDateTime moment) { return moment.atZoneSameInstant(BUSINESS_ZONE).toLocalDate(); }
+    public static LocalDate businessDate(OffsetDateTime moment) { return moment.atZoneSameInstant(BUSINESS_ZONE).toLocalDate(); }
     static LocalDate businessDate(OffsetDateTime moment,LocalTime cutoff) {
         var local=moment.atZoneSameInstant(BUSINESS_ZONE);
         return local.toLocalTime().isBefore(cutoff)?local.toLocalDate().minusDays(1):local.toLocalDate();

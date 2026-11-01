@@ -50,7 +50,9 @@ class BillingIntegrationTest {
         // Idempotency rows reference every billing fact, so they go first.
         db.update("delete from idempotency_requests where operator_id in("+OWN+")");
         db.execute("alter table folio_charges disable trigger folio_charges_append_only");
-        db.execute("alter table payment_records disable trigger payment_records_append_only");
+        // V18 replaced payment_records_append_only with guard (UPDATE) + no_delete (DELETE).
+        db.execute("alter table payment_records disable trigger payment_records_guard");
+        db.execute("alter table payment_records disable trigger payment_records_no_delete");
         db.execute("alter table folio_events disable trigger folio_events_append_only");
         db.execute("alter table service_order_items disable trigger service_order_item_edit");
         db.update("delete from folio_charges where stay_record_id in"+staySet);
@@ -65,7 +67,8 @@ class BillingIntegrationTest {
         db.update("delete from billing_policies where created_by in("+OWN+")");
         db.update("delete from audit_logs where operator_id in("+OWN+")");
         db.execute("alter table folio_charges enable trigger folio_charges_append_only");
-        db.execute("alter table payment_records enable trigger payment_records_append_only");
+        db.execute("alter table payment_records enable trigger payment_records_guard");
+        db.execute("alter table payment_records enable trigger payment_records_no_delete");
         db.execute("alter table folio_events enable trigger folio_events_append_only");
         db.execute("alter table service_order_items enable trigger service_order_item_edit");
         db.update("delete from guests where id in(select guest_id from stay_guests where stay_record_id in"+staySet+")");

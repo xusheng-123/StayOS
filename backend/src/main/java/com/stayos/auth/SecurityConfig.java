@@ -47,6 +47,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/handovers", "/api/handovers/**").authenticated()
                 .requestMatchers("/api/billing", "/api/billing/**", "/api/folios", "/api/folios/**", "/api/service-orders", "/api/service-orders/**").authenticated()
                 .requestMatchers("/api/cashier-shifts", "/api/cashier-shifts/**", "/api/business-days", "/api/business-days/**", "/api/reports", "/api/reports/**").authenticated()
+                .requestMatchers("/api/reservations", "/api/reservations/**", "/api/availability", "/api/inventory", "/api/inventory/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors

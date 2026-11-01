@@ -559,7 +559,7 @@ git diff --check
 | V1.4 | DEFERRED | 酒店启用住中服务后安排 | 本文第 10 节 |
 | V2.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r1：JUnit 420、账务浏览器 4 项全通过及构建打包；V2.0-DELIVERY.md |
 | V2.1 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r1：JUnit 447、12 套浏览器 134 项全通过（含收银 1 项）及构建打包；V2.1-DELIVERY.md |
-| V3.0 | WAITING_DEPENDENCY | 等 V2.1 验收 | 本文第 13 节 |
+| V3.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r2：JUnit 482、浏览器 14 套 148 项全通过（auth 1 项波动经 r3 重跑通过）及构建打包；V3.0-DELIVERY.md |
 | V4.0 | WAITING_DEPENDENCY | 等 V3.0；再核实渠道条件 | 本文第 14 节 |
 | V4.1/V4.2 | DEFERRED | 直订/真实支付需明确启用及供应商 | 本文第 15 节 |
 | V5.0 | WAITING_DEPENDENCY | 主线至 V4.0 后选择经营闭环 | 本文第 16 节 |
@@ -585,13 +585,13 @@ git diff --check
 
 ## 21. 最近交接记录
 
-### 2026-10-31：V2.1 收银交班、营业日与经营报表完成并提交 Git
+### 2026-11-01：V3.0 预订与未来库存完成并提交 Git
 
-- 经用户授权"推送新版本，接着开始下一阶段"，按第 12 节完成全部阶段；V2.0 提交 `422b504` 经同一授权推送远程（推送凭据弹窗由用户完成）。迁移 V17 新增 5 张表（`business_days`/`cashier_shifts`/`cash_counts`/`daily_close_runs`/`daily_reports`），`payment_records` 补 `cashier_shift_id`（入账时点归属、事后不回改），幂等表扩 `result_cashier_shift_id` 与 3 个 CASHIER_SHIFT 操作；权限 `cashier:operate`（前台、总经理）、`cashier:close` 与 `report:finance`（仅总经理）；审计新增 CASHIER 模块 4 动作并补入 `audit:business` 覆盖。`/api/cashier-shifts|business-days|reports/**` 显式放行。
-- 核心规则：班次 OPEN→SUBMITTED→CONFIRMED 单向（触发器白名单、CONFIRMED 不可变），一个收银员同时仅一个进行中班次（偏导唯一索引）；账面应存 = 备用金 + 实收现金 − 退款现金，实盘差异只入不可变 `cash_counts`，从不为平账修改旧收款；关账人工触发三段事务（预约 RUNNING → 校验房费逐条具名 → 汇总校对 → 固化日报快照 → 标记 CLOSED），每营业日唯一 RUNNING 批次靠数据库偏导唯一索引（不靠 JVM 锁）；失败留 FAILED 原因、营业日保持 OPEN 可重试；不因日切自动退房；关账后不改原日报，当期调整按 `reversal_of` 关联原营业日；可售房 = 启用房 − 维修停售覆盖，分母不可靠显式"数据不足"，不伪造 ADR。
-- 关键修复（实测发现）：关账进度触发器初版把 RUNNING→RUNNING 进度更新一并拒绝导致关账必败（409），改为仅拒绝终态改动与携带终止字段的进度更新；`CountRow` 缺 `id` 字段致 useGeneratedKeys 抛 ExecutorException（提交 500）；JSONB 快照读回 `PGobject`、`created_at` 读回 `Timestamp` 两次 ClassCastException，统一归一化（金额按 USE_BIG_DECIMAL_FOR_FLOATS 保留刻度）；e2e 金额断言受测试端 Double 解析丢刻度影响，改 `decimalValue()` 数值比较；连续 MessageBox 卸载动画期 `.el-message-box` 严格模式冲突，按标题过滤定位；`AuditQuery` 遗漏 CASHIER 模块授权补入。
-- 有效验收证据：`.local/releases/V2.1/20261031-200848/`（r1：JUnit 447、0 失败/0 错误/0 跳过；12 套浏览器 134 项全通过 0 flaky，含收银浏览器 1 项；typecheck/build/package 退出码 0）。当前最高迁移 V17，下一号 V18；OperationsInfrastructureTest 迁移计数更新为 17，5 个 SchemaTest 计数 +1。
-- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V2.1 接口与表结构；详细交接见 `docs/releases/V2.1-DELIVERY.md`。下一行动：V3.0 等用户明确授权后从第 13 节开始；V1.4/V4.x/V6.0 保持 DEFERRED。
+- 经用户授权"去做V3.0"，按第 13 节完成全部阶段；V2.1 详细交接移至 `docs/releases/V2.1-DELIVERY.md`（其提交 `e8d8df2` 仍在本地，推送需用户单独授权）。迁移 V18 新增 4 张表：`reservations`（状态机 HELD→CONFIRMED→CHECKED_IN、旁路 CANCELLED/NO_SHOW，触发器白名单迁移）、`reservation_events`（只追加）、`inventory_days`（(room_type_id,stay_date) 唯一、sold>=0）、`inventory_blocks`（房型级停售 [start,end)、一次性解除）；`payment_records` 补 `reservation_id`，附件 CHECK 改"客账或预订二选一"，触发器由只追加改为三件套（V2.0 插入校验 + guard 仅放行开账挂订金 + no_delete），计数 2→3；幂等表扩 2 结果列与 12 个 RESERVATION/INVENTORY 操作；`deploy/runtime-grants.sql` 同步；权限 `reservation:manage`（前台、总经理）、`inventory:manage`（仅总经理），订金退款沿用 `billing:refund`（仅总经理）；审计新增 RESERVATION 模块 12 动作。
+- 核心规则：`[到店, 离店)` 半开区间（至少一晚、最长 365 晚），到店日不早于当前营业日；可售 = `blocked>0 ? 0 : 启用房 − 在住 − 售出`，在住与售出同口径按营业日夜晚统计，预订转入住先释放 sold 再转在住段、同一夜晚不双扣；占满夜晚的创建/修改具名 `ROOM_TYPE_SOLD_OUT` 默认禁止超卖；修改同事务先按房型 id 升序锁旧+新夜晚再释放→核验→占用→版本乐观锁，任一步失败整体回滚原库存不变；保留单到期 `release-expired` 扫描释放（锁批 200、天然幂等）；订金收退复用 V2 真实资金记录（收 `billing:receive`、退 `billing:refund` 且不超原笔未退与余额，REFUND 行 purpose 须空），开立客账时未挂账订金单次迁移至 folio（guard 触发器只放行这一种 UPDATE，reservation_id 双关联保留追溯）；取消罚金首版固定 0.00 如实记录；12 个写操作全幂等（canonical 取原始请求串）；联系人电话可选、AES-GCM 加密保存仅回掩码。
+- 关键修复（实测发现）：可选电话未填时掩码列显式 NULL 撞 NOT NULL（改存空串）；幂等 canonical 混入服务端计算的 heldUntil 致回放 MISMATCH（改携原始串）；取消后全额退款被 `payment_records_check` 拒（REFUND 行 purpose 须空，去掉 mapper 硬编码 'DEPOSIT'）；`/modify` 控制器映射遗漏 404；MyBatis 多参数下 modify 脚本缺 `row.` 前缀；`ApiErrors` 对 DIVE 的通用 409 掩盖根因（临时诊断日志定位后移除）；房间默认 DIRTY（用例先置 CLEAN）；测试侧 bookable 语义修正为 min(available)；r1 全量回归暴露遗留测试未跟上触发器替换——Billing/CashierIntegrationTest 清库仍禁用已删除的 `payment_records_append_only`（改为 guard+no_delete，其 @BeforeAll 失败遗留 folio_charges_append_only 禁用态连带 CHARGE_DELETE 误报）、CashierSchemaTest V16→HEAD 迁移数断言 1→2。
+- 有效验收证据：`.local/releases/V3.0/20261031-235925/`（r2 全量：JUnit 482 项 481 绿，唯一失败为 auth 浏览器 1 项环境性登录页 30 秒超时——前端自 r1 起零改动，r3 单独重跑 22/22 通过；浏览器 14 套 148 项全通过 0 unexpected，含新增 reservations.spec.ts 1 项；四类门禁 61 项；首轮失败日志 `test-full-r1-failed.log` 原样保留）。当前最高迁移 V18，下一号 V19。
+- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V3.0 接口与表结构；详细交接见 `docs/releases/V3.0-DELIVERY.md`。下一行动：V4.0 等用户明确授权并核实渠道条件后从第 14 节开始；V1.4/V4.x/V6.0 保持 DEFERRED。
 
 后续交接每次替换“最近记录”，较早详细记录放对应 `docs/releases/`；不删除原始验收证据。
 

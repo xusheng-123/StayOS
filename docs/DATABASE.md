@@ -407,3 +407,17 @@ V1.3 当时漏登记本文件，这里补记；完整不变式见 [V1.3 交付�
 - `deploy/runtime-grants.sql`：受限运行角色补 5 张新表 INSERT 与 business_days/cashier_shifts/daily_close_runs UPDATE；`cash_counts/daily_reports` 仍无 UPDATE/DELETE 权限。
 
 当前最高迁移 **V17**，下一号 V18。迁移计数断言已更新：BillingSchemaTest 2（V16+V17）、StayExtensionSchemaTest 5、GuestCorrectionSchemaTest 4、HandoverSchemaTest 3、HousekeepingSchemaTest 9、CashierSchemaTest 1（升级自 V16 场景）。
+
+## V3.0 / V18 增量：预订与未来库存
+
+`V18__reservations_inventory.sql` 按开发手册第 13 节建预订与未来库存底座。住客身份资料只存加密联系人与掩码；账务表不复制住客身份。
+
+- `reservations`：预订单。区间 `[arrival_date, departure_date)` 半开 CHECK（`departure_date>arrival_date`）；状态 `HELD/CONFIRMED/CANCELLED/NO_SHOW/CHECKED_IN`，来源 `PHONE/WALK_IN/OTA/OTHER`；联系人姓名 1—100 字必填；`contact_phone_ciphertext` 可空、`contact_phone_mask NOT NULL DEFAULT ''`（未留电话时掩码空串，密文与 key id 同空同在）；`held_until` 保留到期；外部单号 1—120 字（可空，应用层去重）；`checked_in_stay_id` UNIQUE 关联在住记录（一预订至多一次转入住）；`version` 乐观锁。触发器 `validate_reservation_update` 白名单状态迁移并强制状态与时间戳/操作人/取消原因一致性（HELD 须有待到期、CONFIRMED 须有确认人与时间、CANCELLED 须有原因与时间等）。
+- `reservation_events`：预订事件只追加表（触发器 `reservation_events_append_only` 拒绝 UPDATE/DELETE），动作 + 操作人 + 说明，不含敏感输入。
+- `inventory_days`：未来库存计数 `(room_type_id, stay_date)` 唯一，`sold>=0` CHECK（重复释放即约束失败）；行由业务 `INSERT … ON CONFLICT DO NOTHING` 保证存在后按序 `FOR UPDATE` 锁定。
+- `inventory_blocks`：房型级计划停售 `[start_date, end_date)`，原因 1—500 字必填；`released_at/released_by` 一次性解除（`released_at is null` 条件更新），生效区间与解除状态一致性 CHECK。
+- `payment_records`：新增 `reservation_id`（可空）+ 附件 CHECK 改为 `folio_id IS NOT NULL OR reservation_id IS NOT NULL`（订金迁移后**双关联保留**以便追溯）；部分索引 `ix_payment_records_reservation` 仅覆盖预订订金。触发器从"只追加"改为三件套：V2.0 `payment_record_insert` 插入校验 + V18 `payment_records_guard`（仅放行"未迁移订金挂 folio"这一种 UPDATE 且其余字段全等）+ `payment_records_no_delete`。
+- 幂等扩展：`idempotency_requests` 增加 `result_reservation_id`/`result_inventory_block_id` 与 12 个 RESERVATION/INVENTORY 操作；结果列互斥 CHECK 以子串包裹方式扩展。
+- `deploy/runtime-grants.sql`：受限运行角色补 reservations/inventory_days/inventory_blocks INSERT 与 UPDATE；reservation_events 仅 INSERT/SELECT（只追加）；inventory_blocks 无 DELETE。
+
+当前最高迁移 **V18**，下一号 V19。迁移计数断言已更新：BillingSchemaTest 3（V16+V17+V18）、StayExtensionSchemaTest 6、GuestCorrectionSchemaTest 5、HandoverSchemaTest 4、HousekeepingSchemaTest 10、OperationsInfrastructureTest 18；`payment_records` 触发器计数 2→3。

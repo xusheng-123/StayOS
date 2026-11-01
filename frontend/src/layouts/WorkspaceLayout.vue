@@ -47,7 +47,8 @@ async function leave() {
       <nav v-if="can('handover:front-desk') || can('handover:housekeeping')" aria-label="交接班功能"><router-link to="/handovers" :class="['nav-link', { active: route.path.startsWith('/handovers') }]"><span class="nav-number">17</span>交接班<span class="nav-arrow">›</span></router-link></nav>
       <nav v-if="can('billing:read')" aria-label="账务功能"><router-link to="/billing" :class="['nav-link', { active: route.path.startsWith('/billing') }]"><span class="nav-number">18</span>账务<span class="nav-arrow">›</span></router-link></nav>
       <nav v-if="can('cashier:operate') || can('report:finance')" aria-label="收银与日报"><router-link to="/cashier" :class="['nav-link', { active: route.path.startsWith('/cashier') || route.path.startsWith('/reports') }]"><span class="nav-number">19</span>收银与日报<span class="nav-arrow">›</span></router-link></nav>
-      <div class="sidebar-bottom"><span class="status-dot"></span> StayOS V2.1</div>
+      <nav v-if="can('reservation:manage') || can('inventory:manage')" aria-label="预订功能"><router-link v-if="can('reservation:manage')" to="/reservations" :class="['nav-link', { active: route.path.startsWith('/reservations') }]"><span class="nav-number">20</span>预订管理<span class="nav-arrow">›</span></router-link><router-link to="/availability" :class="['nav-link', { active: route.path === '/availability' }]"><span class="nav-number">21</span>可售与库存<span class="nav-arrow">›</span></router-link></nav>
+      <div class="sidebar-bottom"><span class="status-dot"></span> StayOS V3.0</div>
       <nav v-if="can('audit:management') || can('audit:business') || can('audit:housekeeping')" aria-label="操作记录"><router-link to="/audit-logs" :class="['nav-link', { active: route.path === '/audit-logs' }]"><span class="nav-number">15</span>操作记录<span class="nav-arrow">›</span></router-link></nav>
     </aside>
     <div class="workspace-body">

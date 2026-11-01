@@ -29,8 +29,8 @@ class BillingSchemaTest {
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement()) {
                 q.execute("insert into users(id,username,password_hash,display_name) values(900001,'legacy_billing','"+new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4).encode("fictional-password")+"','虚构旧版员工')");
             }
-            // Two migrations apply since V2.1: V16 (billing foundation) and V17 (cashier/business days).
-            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);flyway.validate();
+            // Three migrations apply since V2.1: V16 (billing foundation), V17 (cashier/business days) and V18 (reservations/inventory).
+            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);flyway.validate();
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement();var r=q.executeQuery(
                 "select count(*) from information_schema.tables where table_schema='public' and table_name in "+
                 "('billing_policies','rate_plans','room_rate_days','service_catalog','service_orders','service_order_items','folios','folio_charges','payment_records','folio_events')")) {
@@ -52,7 +52,8 @@ class BillingSchemaTest {
         assertThat(db.queryForObject("select count(*) from pg_indexes where indexname='uq_payment_reference' and indexdef like '%WHERE%'",Integer.class)).isEqualTo(1);
         assertThat(db.queryForObject("select count(*) from pg_constraint where conrelid='folios'::regclass and conname='folios_stay_record_id_key' and contype='u'",Integer.class)).isEqualTo(1);
         assertThat(db.queryForObject("select count(*) from pg_trigger where tgrelid='folio_charges'::regclass and not tgisinternal",Integer.class)).isEqualTo(2);
-        assertThat(db.queryForObject("select count(*) from pg_trigger where tgrelid='payment_records'::regclass and not tgisinternal",Integer.class)).isEqualTo(2);
+        // V3.0 replaces the append-only trigger with migration guard + delete guard beside the insert validator.
+        assertThat(db.queryForObject("select count(*) from pg_trigger where tgrelid='payment_records'::regclass and not tgisinternal",Integer.class)).isEqualTo(3);
         assertThat(db.queryForObject("select count(*) from pg_trigger where tgrelid='folio_events'::regclass and not tgisinternal",Integer.class)).isEqualTo(1);
         assertThat(db.queryForObject("select count(*) from pg_trigger where tgrelid='service_order_items'::regclass and not tgisinternal",Integer.class)).isEqualTo(1);
     }

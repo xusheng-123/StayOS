@@ -89,7 +89,12 @@ public class FolioService {
         row.chargesEffectiveFrom=effectiveFrom;
         row.openedBy=actor;
         if(billing.insertFolio(row)!=1) throw new IllegalStateException("Folio was not saved");
-        billing.insertEvent(row.id,"OPENED",actor,null,encode(java.util.Map.of("pricingStatus",row.pricingStatus)));
+        // V3.0: reservation deposits follow the booking into its folio exactly once (guarded trigger), so the same
+        // money is never recorded twice — the payment row keeps reservation_id for traceability.
+        int migratedDeposits=0;
+        var reservationId=billing.reservationOfStay(stayId);
+        if(reservationId!=null) migratedDeposits=billing.migrateReservationDeposits(row.id,reservationId);
+        billing.insertEvent(row.id,"OPENED",actor,null,encode(java.util.Map.of("pricingStatus",row.pricingStatus,"migratedDeposits",migratedDeposits)));
         audit.success(actor,"FOLIO_OPEN","BILLING",row.id);
         requests.completeFolio(actor,"FOLIO_OPEN",key,row.id);
         return detailOf(row.id);

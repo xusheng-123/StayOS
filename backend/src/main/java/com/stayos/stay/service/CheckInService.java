@@ -23,7 +23,8 @@ public class CheckInService {
     }
     private static String text(String s) { return s==null?"":s.trim(); }
     private static ApiException invalid(String message) { return new ApiException(400,"VALIDATION_ERROR",message); }
-    private CheckIn normalize(CheckIn input) {
+    /** Shared validation for walk-in and reservation check-in; pure, no database access. */
+    public CheckIn normalize(CheckIn input) {
         if(input.roomId()==null || input.roomId()<1 || input.expectedCheckOutAt()==null || input.guests()==null || input.guests().isEmpty() || input.guests().size()>20)
             throw invalid("请选择房间、预计退房时间并登记 1—20 名实际住客");
         var guests=new ArrayList<GuestInput>();var documents=new HashSet<String>();int primary=0;
@@ -46,6 +47,12 @@ public class CheckInService {
         Long previous=requests.reserve(actor,"CHECK_IN",requestKey,input);
         actors.require(actor,"stay:manage");
         if(previous!=null) return previous;
+        long id=createInternal(actor,input);
+        requests.complete(actor,"CHECK_IN",requestKey,id);
+        return id;
+    }
+    /** Room lock -> eligibility -> stay/guests/segment facts. Runs inside the caller's transaction and audit CHECK_IN itself. */
+    public long createInternal(long actor,CheckIn input) {
         if(rooms.lock(input.roomId())==null) throw new ApiException(404,"ROOM_NOT_FOUND","房间不存在");
         var room=rooms.detail(input.roomId());
         com.stayos.room.service.RoomEligibility.requireAvailable(room);
@@ -61,7 +68,6 @@ public class CheckInService {
         }
         stays.segment(id,room.id,room.roomNumber,room.roomTypeName,now);
         audit.success(actor,"CHECK_IN","STAY",id);
-        requests.complete(actor,"CHECK_IN",requestKey,id);
         return id;
     }
 }

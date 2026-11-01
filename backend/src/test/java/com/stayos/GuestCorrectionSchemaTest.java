@@ -32,7 +32,7 @@ class GuestCorrectionSchemaTest {
                 q.execute("insert into guests(id,display_name,document_type,document_ciphertext,document_mask,phone_mask,encryption_key_id) values(900001,'legacy guest','OTHER','"+legacyCipher+"','LE****NT','','v1')");
                 q.execute("insert into stay_guests(stay_record_id,guest_id,is_primary,position) values(900001,900001,true,0)");
             }
-            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);flyway.validate();
+            var flyway=Flyway.configure().dataSource(url,owner,password).load();assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);flyway.validate();
             assertThat(db.queryForObject("select count(*) from information_schema.tables where table_schema='public' and table_name='shift_handovers'",Integer.class)).isEqualTo(1);
             try(var c=DriverManager.getConnection(url,owner,password);var q=c.createStatement();var r=q.executeQuery("select version,notes,expected_check_out_at from stay_records where id=900001")) {
                 assertThat(r.next()).isTrue();assertThat(r.getLong(1)).isZero();assertThat(r.getString(2)).isEqualTo("legacy snapshot");

@@ -44,13 +44,16 @@ class CashierIntegrationTest {
             "("+stays.stream().map(String::valueOf).reduce((a,b)->a+","+b).orElse("")+")";
         db.update("delete from idempotency_requests where operator_id in("+OWN+")");
         db.execute("alter table folio_charges disable trigger folio_charges_append_only");
-        db.execute("alter table payment_records disable trigger payment_records_append_only");
+        // V18 replaced payment_records_append_only with guard (UPDATE) + no_delete (DELETE).
+        db.execute("alter table payment_records disable trigger payment_records_guard");
+        db.execute("alter table payment_records disable trigger payment_records_no_delete");
         db.execute("alter table folio_events disable trigger folio_events_append_only");
         db.update("delete from folio_charges where stay_record_id in"+staySet);
         db.update("delete from payment_records where folio_id in(select id from folios where stay_record_id in"+staySet+")");
         db.update("delete from folio_events where folio_id in(select id from folios where stay_record_id in"+staySet+")");
         db.execute("alter table folio_charges enable trigger folio_charges_append_only");
-        db.execute("alter table payment_records enable trigger payment_records_append_only");
+        db.execute("alter table payment_records enable trigger payment_records_guard");
+        db.execute("alter table payment_records enable trigger payment_records_no_delete");
         db.execute("alter table folio_events enable trigger folio_events_append_only");
         db.execute("alter table daily_reports disable trigger daily_reports_append_only");
         db.execute("alter table daily_close_runs disable trigger daily_close_runs_append_only");

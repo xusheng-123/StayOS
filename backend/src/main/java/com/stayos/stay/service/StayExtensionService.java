@@ -19,14 +19,16 @@ public class StayExtensionService {
     private final StayMapper stays;
     private final CheckoutMapper segments;
     private final RoomMapper rooms;
+    private final com.stayos.reservation.ReservationMapper reservationMapper;
     private final IdempotencyService requests;
     private final BusinessActorGuard actors;
     private final AuditService audit;
 
     public StayExtensionService(StayExtensionMapper extensions, StayMapper stays, CheckoutMapper segments,
-                                RoomMapper rooms, IdempotencyService requests, BusinessActorGuard actors, AuditService audit) {
+                                RoomMapper rooms, com.stayos.reservation.ReservationMapper reservationMapper,
+                                IdempotencyService requests, BusinessActorGuard actors, AuditService audit) {
         this.extensions=extensions; this.stays=stays; this.segments=segments; this.rooms=rooms;
-        this.requests=requests; this.actors=actors; this.audit=audit;
+        this.reservationMapper=reservationMapper; this.requests=requests; this.actors=actors; this.audit=audit;
     }
     private record Canonical(long stayId, long segmentId, long version, OffsetDateTime departure, String reason) {}
 
@@ -57,6 +59,19 @@ public class StayExtensionService {
         if (now.isBefore(segment.enteredAt)) throw conflict("SERVER_TIME_INVALID","服务器时间早于当前房间使用时间，请联系管理员核查");
         if (!departure.isAfter(now) || !departure.isAfter(stay.checkInAt)) throw invalid("新的预计退房时间必须晚于当前时间及实际入住时间");
         if (departure.isEqual(stay.expectedCheckOutAt)) throw invalid("新的预计退房时间与原时间相同，无需提交");
+        // V3.0: extending past the booked horizon consumes future type inventory. Advise the conflict by naming a
+        // date; we never auto-evict the in-house guest. Read-only check (no inventory locks) keeps the stay -> room
+        // -> segment lock order deadlock-free with the reservation module's inventory-first ordering.
+        if (departure.isAfter(stay.expectedCheckOutAt)) {
+            var room=rooms.detail(before.roomId);
+            var from=com.stayos.billing.BillingDtos.businessDate(stay.expectedCheckOutAt);
+            var to=com.stayos.billing.BillingDtos.businessDate(departure).minusDays(1);
+            if (!to.isBefore(from)) {
+                var full=reservationMapper.nightRows(room.roomTypeId,from,to).stream()
+                    .filter(n->n.available<1).map(n->n.stayDate.toString()).toList();
+                if (!full.isEmpty()) throw conflict("FUTURE_NIGHT_CONFLICT","续住后 "+full.get(0)+" 起的未来库存不足，请先与前台协调预订，系统不会自动释放在住房间");
+            }
+        }
         Result result=new Result();
         result.stayRecordId=id; result.segmentId=segment.id; result.roomId=segment.roomId;
         result.oldExpectedCheckOutAt=stay.expectedCheckOutAt; result.newExpectedCheckOutAt=departure;

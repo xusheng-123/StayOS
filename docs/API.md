@@ -514,3 +514,31 @@ V1.3 当时漏登记本文件，这里补记接口边界；完整规则与验收
 分母口径：可售房 = 启用房 − 维修停售覆盖该日的房间；无可售房或无已售房晚时出租率/ADR 为 `null` 并在 `dataGaps` 标记"数据不足"，不做推算。原营业日关闭后不改原日报；当期调整记入当前营业日并按 `reversal_of` 关联原费用。
 
 主要错误码：`SHIFT_ALREADY_OPEN`（已有进行中班次）、`SHIFT_NOT_FOUND`、`SHIFT_STATE`（状态不符）、`STALE_VERSION`（版本冲突）、`BILLING_POLICY_REQUIRED`（无生效政策）、`DAY_ALREADY_CLOSED`（重复关账）、`CLOSE_FAILED`（关账校验未通过，message 含逐条问题明细）、`DATA_CONFLICT`（并发关账或约束冲突）、`VALIDATION_ERROR`（金额/日期格式）。
+
+## V3.0 预订与未来库存接口
+
+按开发手册第 13 节实现；权限 `reservation:manage`（前台/总经理）、`inventory:manage`（仅总经理，停售）；预订退款另需 `billing:refund`（仅总经理）。入住区间一律 `[arrivalDate, departureDate)` 半开、至少一晚、最长 365 晚；状态机 `HELD → CONFIRMED → CHECKED_IN`，旁路 `CANCELLED`、`NO_SHOW`；联系电话可选、AES-GCM 加密保存、接口只出掩码；全部写操作带 UUID `Idempotency-Key`（同键同内容回放，不同内容 `IDEMPOTENCY_MISMATCH`）；修改/取消等带版本乐观锁的地方见各条。
+
+| 方法与路径 | 规则 |
+| --- | --- |
+| `GET /api/reservations?status=&arrivalFrom=&arrivalTo=&query=&page=&pageSize=` | 预订分页；query 按外部单号/联系人模糊 |
+| `POST /api/reservations` | `{arrivalDate,departureDate,roomTypeId,source,externalRef?,contactName,contactPhone?,heldUntil?,notes?}`；默认 HELD、到期 now+24h；默认禁止超卖（`ROOM_TYPE_SOLD_OUT` 报首个满夜）；外部单号去重 `EXTERNAL_REF_EXISTS` |
+| `GET /api/reservations/{id}` | 详情：预订、事件轨迹、订金列表；密文绝不出接口 |
+| `POST /api/reservations/{id}/modify` | `{version,arrivalDate?,departureDate?,roomTypeId?,contactName?,contactPhone?,notes?}`；同事务先锁旧+新日期（房型 id、日期升序）→ 释放旧 → 核验新 → 占用新 → 版本更新；失败整体回滚原预订原库存不变；版本不符 `STALE_VERSION`；满夜 `ROOM_TYPE_SOLD_OUT` |
+| `POST /api/reservations/{id}/confirm` | HELD → CONFIRMED |
+| `POST /api/reservations/{id}/cancel` | `{reason}`（1—500 字）；HELD/CONFIRMED → CANCELLED，释放 sold；罚金 0.00 元（首版未配置罚金政策，如实记录） |
+| `POST /api/reservations/{id}/mark-no-show` | 仅 CONFIRMED；释放 sold |
+| `POST /api/reservations/{id}/assign-room` | `{roomId}`；房型必须一致（`ROOM_TYPE_MISMATCH`）；分配是建议性，实际可住以入住校验为准 |
+| `POST /api/reservations/{id}/check-in` | 复用入住入参（`{roomId,expectedCheckOutAt,guests}`）；仅 CONFIRMED；先释放 sold 再建在住段，同一夜晚不双扣；实际房间房型不一致 `ROOM_TYPE_MISMATCH`，脏房 `ROOM_NOT_AVAILABLE`；预计退房超出预订区间且未来夜晚已售 `FUTURE_NIGHT_CONFLICT`（只提示不自动赶客）；重复操作 `RESERVATION_STATE` |
+| `POST /api/reservations/release-expired` | 释放到期保留单（每批最多 200，天然幂等），取消原因"保留单到期自动释放" |
+| `POST /api/reservations/{id}/deposits` | `billing:receive`；`{method,amount,methodReference?,note?}`；写 `payment_records`（folio_id 空 + reservation_id，purpose=DEPOSIT）；CANCELLED/NO_SHOW 拒收，CHECKED_IN 提示转客账 |
+| `POST /api/reservations/{id}/deposits/refund` | `billing:refund`；`{paymentRecordId,amount,reason}`；不超原笔未退金额与订金余额（`REFUND_EXCEEDS_LIMIT`）；已迁移客账的订金转客账退款 |
+| `GET /api/reservations/receipt` | 普通收据打印视图（不标法定发票） |
+| `GET /api/availability?arrivalDate=&departureDate=` | 所有启用房型逐夜 `{enabledRooms,occupied,sold,blocked,available}` 与 `bookable`（整段可订笔数 = min(available)）；最长 60 夜 |
+| `GET /api/inventory/blocks?includeReleased=&page=&pageSize=` | 停售计划分页（仅 `inventory:manage`） |
+| `POST /api/inventory/blocks` | `{roomTypeId,startDate,endDate,reason}`；房型级停售 `[start,end)`，区间内可售归零，不影响在住与既有事实 |
+| `POST /api/inventory/blocks/{id}/release` | 解除停售，可售恢复；重复解除 `BLOCK_STATE` |
+
+可售口径：`available = blocked>0 ? 0 : enabled_rooms − occupied − sold`；`occupied` 按营业日夜晚统计在住段（`[入住日, 实际/预计离店日)`），`sold` 只统计 HELD/CONFIRMED 预订；转入住时 sold 释放、占用转入在住段。
+
+主要错误码：`ROOM_TYPE_SOLD_OUT`、`ROOM_TYPE_NOT_FOUND`、`ROOM_NOT_FOUND`、`ROOM_TYPE_MISMATCH`、`ROOM_NOT_AVAILABLE`、`EXTERNAL_REF_EXISTS`、`RESERVATION_NOT_FOUND`、`RESERVATION_STATE`、`STALE_VERSION`、`FUTURE_NIGHT_CONFLICT`、`PAYMENT_NOT_FOUND`、`REFUND_EXCEEDS_LIMIT`、`BLOCK_NOT_FOUND`、`BLOCK_STATE`、`IDEMPOTENCY_MISMATCH`、`VALIDATION_ERROR`。
