@@ -42,12 +42,14 @@ public class ReservationService {
     private final GuestProtection protection;
     private final CashierMapper cashierShifts;
     private final AuditService audit;
+    private final com.stayos.integration.ChannelOutboxRecorder channelOutbox;
 
     public ReservationService(ReservationMapper reservations,StayMapper requestsMapper,IdempotencyService requests,
         BusinessActorGuard actors,RoomMapper rooms,CheckInService checkIns,GuestProtection protection,
-        CashierMapper cashierShifts,AuditService audit) {
+        CashierMapper cashierShifts,AuditService audit,com.stayos.integration.ChannelOutboxRecorder channelOutbox) {
         this.reservations=reservations;this.requestsMapper=requestsMapper;this.requests=requests;this.actors=actors;
         this.rooms=rooms;this.checkIns=checkIns;this.protection=protection;this.cashierShifts=cashierShifts;this.audit=audit;
+        this.channelOutbox=channelOutbox;
     }
 
     // ---------- queries ----------
@@ -190,6 +192,7 @@ public class ReservationService {
         }
         if(reservations.modify(update,row.version)!=1) throw conflict("STALE_VERSION","预订已被其他人更新，请刷新后重新提交");
         reservations.insertEvent(id,"MODIFY",actor,describeModify(row,newArrival,newDeparture,effectiveRoomType));
+        channelOutbox.recordReservationEvent(id,"RESERVATION_MODIFIED",null);
         audit.success(actor,"RESERVATION_MODIFY","RESERVATION",id);
         requests.completeReservation(actor,"RESERVATION_MODIFY",key,id);
         return detail(actor,id);
@@ -216,6 +219,7 @@ public class ReservationService {
         var now=now();
         if(reservations.confirm(id,actor,now)!=1) throw conflict("RESERVATION_STATE","只有保留（HELD）状态的预订可以确认");
         reservations.insertEvent(id,"CONFIRM",actor,"预订已确认");
+        channelOutbox.recordReservationEvent(id,"RESERVATION_CONFIRMED",null);
         audit.success(actor,"RESERVATION_CONFIRM","RESERVATION",id);
         requests.completeReservation(actor,"RESERVATION_CONFIRM",key,id);
         return detail(actor,id);
@@ -236,6 +240,7 @@ public class ReservationService {
         // First version records the fee policy honestly: no configured penalty policy means zero penalty charged.
         if(reservations.cancel(id,actor,now(),reason)!=1) throw conflict("RESERVATION_STATE","预订当前状态不能取消");
         reservations.insertEvent(id,"CANCEL",actor,reason+"；取消罚金 0.00 元（首版未配置罚金政策，如实记录）");
+        channelOutbox.recordReservationEvent(id,"RESERVATION_CANCELLED",null);
         audit.success(actor,"RESERVATION_CANCEL","RESERVATION",id);
         requests.completeReservation(actor,"RESERVATION_CANCEL",key,id);
         return detail(actor,id);
@@ -313,6 +318,7 @@ public class ReservationService {
         }
         if(reservations.checkIn(id,stayId)!=1) throw conflict("RESERVATION_STATE","预订当前状态不能转入住");
         reservations.insertEvent(id,"CHECK_IN",actor,"转为入住，房间 "+room.roomNumber);
+        channelOutbox.recordReservationEvent(id,"RESERVATION_CHECKED_IN",null);
         audit.success(actor,"RESERVATION_CHECK_IN","RESERVATION",id);
         requests.completeReservation(actor,"RESERVATION_CHECK_IN",key,id);
         return new CheckInResult(id,stayId);

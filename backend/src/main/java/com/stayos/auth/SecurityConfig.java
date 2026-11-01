@@ -33,11 +33,15 @@ public class SecurityConfig {
     @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository contexts,
             CsrfTokenRepository csrf, UserMapper users, IpLoginLimiter limiter, ObjectMapper json, AuditService audit,ClientAddressResolver addresses) throws Exception {
         http.securityContext(context -> context.securityContextRepository(contexts).requireExplicitSave(true))
-            .csrf(config -> config.csrfTokenRepository(csrf))
+            // Supplier callbacks are the ONE CSRF-exempt surface (guide section 14): exact POST paths only,
+            // and each request still has to pass the adapter's signature check before anything persists.
+            .csrf(config -> config.csrfTokenRepository(csrf)
+                .ignoringRequestMatchers(new org.springframework.security.web.util.matcher.RegexRequestMatcher("/api/integration/callbacks/[^/]+", "POST")))
             .requestCache(cache -> cache.disable())
             .formLogin(form -> form.disable()).httpBasic(basic -> basic.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/health", "/api/health/ready", "/api/auth/csrf", "/api/auth/login").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/integration/callbacks/*").permitAll()
                 .requestMatchers("/api/auth/me", "/api/auth/status", "/api/auth/logout", "/api/workspaces/**", "/api/users/**", "/api/roles").authenticated()
                 .requestMatchers("/api/room-types", "/api/room-types/**", "/api/rooms", "/api/rooms/**", "/api/room-status", "/api/room-status/**", "/api/floors").authenticated()
                  .requestMatchers("/api/room-issues", "/api/room-issues/**", "/api/room-operations/**").authenticated()
@@ -48,6 +52,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/billing", "/api/billing/**", "/api/folios", "/api/folios/**", "/api/service-orders", "/api/service-orders/**").authenticated()
                 .requestMatchers("/api/cashier-shifts", "/api/cashier-shifts/**", "/api/business-days", "/api/business-days/**", "/api/reports", "/api/reports/**").authenticated()
                 .requestMatchers("/api/reservations", "/api/reservations/**", "/api/availability", "/api/inventory", "/api/inventory/**").authenticated()
+                .requestMatchers("/api/channels", "/api/channels/**").authenticated()
                 .requestMatchers("/api/housekeeping-tasks", "/api/housekeeping-tasks/**").authenticated()
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors

@@ -421,3 +421,19 @@ V1.3 当时漏登记本文件，这里补记；完整不变式见 [V1.3 交付�
 - `deploy/runtime-grants.sql`：受限运行角色补 reservations/inventory_days/inventory_blocks INSERT 与 UPDATE；reservation_events 仅 INSERT/SELECT（只追加）；inventory_blocks 无 DELETE。
 
 当前最高迁移 **V18**，下一号 V19。迁移计数断言已更新：BillingSchemaTest 3（V16+V17+V18）、StayExtensionSchemaTest 6、GuestCorrectionSchemaTest 5、HandoverSchemaTest 4、HousekeepingSchemaTest 10、OperationsInfrastructureTest 18；`payment_records` 触发器计数 2→3。
+## V4.0 / V19 增量：渠道连接
+
+`V19__channel_integration.sql` 按开发手册第 14 节建渠道接入底座（6 表，全部供应商无关，厂商字段止步于 adapter）：
+
+- `channel_connections`：连接（`supplier_code` CHECK 限 `SIMULATOR`，真实供应商待接入时扩展；`status` ACTIVE/PAUSED/BLOCKED_EXTERNAL）；只存 `credential_ref` / `callback_secret_ref` 引用名（trim CHECK），**无任何密钥值列**；`last_inbound_at/last_outbound_at/last_sync_at/last_error` 留痕；`version` 乐观锁；唯一索引 `uq_channel_connections_name`。
+- `channel_mappings`：渠道编码 ↔ 本地房型/价格计划；`kind` CHECK `ROOM_TYPE/RATE_PLAN`；`(connection_id,kind,external_code)` 与 `(connection_id,kind,local_id)` 双唯一；`created_by` 引用操作人。
+- `inbound_events`：入站事实先持久化后处理；`(connection_id,external_event_id)` 唯一（重复回调 409）；`status` PENDING/PROCESSED/OBSOLETE/MANUAL；`sequence_no≥0` 支撑供应商序号协议（乱序记 OBSOLETE 不应用）；`payload` JSONB 只存中性字段；部分索引 `ix_inbound_events_pending`（仅 PENDING）。
+- `outbox_events`：发件箱与业务变更同事务写入；`event_type` CHECK 7 值（预订四态 + 入住 + 库存停售/恢复）；`CONSTRAINT outbox_events_sent_check CHECK ((status='SENT') = (sent_at IS NOT NULL))`；索引 `ix_outbox_events_pending`。
+- `sync_attempts`：每次投递/处理尝试的追加只写流水（`direction` OUTBOUND/INBOUND_PROCESS、`outcome` SUCCESS/FAILURE/SKIPPED、`duration_ms`、简短原因；授予 INSERT/SELECT 不授予 UPDATE/DELETE）。
+- `reconciliation_runs`：对账批次；`CONSTRAINT reconciliation_runs_finish_check CHECK ((status='RUNNING') = (finished_at IS NULL))`；计数列 CHECK ≥0；`detail` JSONB 存差异明细（仅外部单号，不含住客资料）。
+
+`deploy/runtime-grants.sql`：6 表授予 runtime INSERT/SELECT/UPDATE（channel_mappings 另有 DELETE；`sync_attempts` 保持追加只写）；`channel_mappings` 加入 DELETE 授权清单。
+
+测试：`ChannelSchemaTest` 8 项（从 V18 升级恰好 1 个迁移、6 表齐全、凭据引用列齐全且无密钥列、约束/索引名、非法事实拒写）。迁移计数断言更新：HousekeepingSchemaTest 11、HandoverSchemaTest 5、CashierSchemaTest 3、ReservationSchemaTest 2、StayExtensionSchemaTest 7、GuestCorrectionSchemaTest 6、BillingSchemaTest 4、OperationsInfrastructureTest 19（禁改清单新增 channel 四表的 delete/update）。
+
+当前最高迁移 **V19**，下一号 V20。

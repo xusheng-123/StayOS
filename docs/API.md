@@ -542,3 +542,29 @@ V1.3 当时漏登记本文件，这里补记接口边界；完整规则与验收
 可售口径：`available = blocked>0 ? 0 : enabled_rooms − occupied − sold`；`occupied` 按营业日夜晚统计在住段（`[入住日, 实际/预计离店日)`），`sold` 只统计 HELD/CONFIRMED 预订；转入住时 sold 释放、占用转入在住段。
 
 主要错误码：`ROOM_TYPE_SOLD_OUT`、`ROOM_TYPE_NOT_FOUND`、`ROOM_NOT_FOUND`、`ROOM_TYPE_MISMATCH`、`ROOM_NOT_AVAILABLE`、`EXTERNAL_REF_EXISTS`、`RESERVATION_NOT_FOUND`、`RESERVATION_STATE`、`STALE_VERSION`、`FUTURE_NIGHT_CONFLICT`、`PAYMENT_NOT_FOUND`、`REFUND_EXCEEDS_LIMIT`、`BLOCK_NOT_FOUND`、`BLOCK_STATE`、`IDEMPOTENCY_MISMATCH`、`VALIDATION_ERROR`。
+
+## V4.0 渠道连接接口
+
+按开发手册第 14 节实现供应商无关的渠道接入底座。权限 `channel:manage` 仅总经理。回调路径 `POST /api/integration/callbacks/{supplierCode}` 免登录但受 HMAC-SHA256 签名保护（`X-StayOS-Signature`，常量时间比较）；其余渠道接口全部要求登录 + `channel:manage`。首个获授权供应商条件缺失（无接口权限/正式文档/沙箱账号），按手册第 14 节回退完成供应商无关核心 + adapter 协议 + 可控模拟（SIMULATOR），真实供应商保持 `BLOCKED_EXTERNAL`，不宣称端到端集成通过。
+
+凭据规则：连接只保存 `credentialRef` / `callbackSecretRef` 引用名，运行时按"系统属性 → 环境变量 → Spring Environment"解析；解析失败 `CREDENTIAL_UNRESOLVED`（创建时即校验）；真实密钥值不进数据库、日志、接口响应与审计文本。
+
+| 方法与路径 | 规则 |
+| --- | --- |
+| `POST /api/integration/callbacks/{supplierCode}` | 供应商回调入口（免登录、CSRF 精确豁免）。签名失败 401 `CALLBACK_SIGNATURE_INVALID`（审计 `CHANNEL_CALLBACK_SIGNATURE`，不持久化任何内容）；验证通过后先持久化入站事实再异步处理；重复 `(connection, external_event_id)` 409 `DUPLICATE_EVENT`；内容不合法 400 `CALLBACK_MALFORMED`；事件类型限 `ORDER_CREATE/ORDER_MODIFY/ORDER_CANCEL/PRICE_UPDATE` |
+| `GET /api/channels` | 连接列表：状态、凭据引用、最近收发/对账时间、最近错误、待处理/人工处理计数；不含密钥 |
+| `POST /api/channels` | `{supplierCode,name,baseUrl?,credentialRef,callbackSecretRef,notes?}`；供应商未注册直接 400；创建时立即解析凭据引用 |
+| `GET /api/channels/{id}` | 连接详情 + 最近 10 条同步尝试 |
+| `PATCH /api/channels/{id}` | `{version,status?,baseUrl?,credentialRef?,callbackSecretRef?,notes?}`；乐观锁 `STALE_VERSION`；状态 `ACTIVE/PAUSED/BLOCKED_EXTERNAL` |
+| `GET/POST /api/channels/{id}/mappings`、`DELETE /api/channels/mappings/{mappingId}` | 渠道编码 ↔ 本地房型/价格计划映射；`kind=ROOM_TYPE/RATE_PLAN`；每连接每类型每编码/每本地对象唯一（`MAPPING_EXISTS`） |
+| `GET /api/channels/{id}/inbound?status=&page=&pageSize=` | 入站事件分页（`PENDING/PROCESSED/OBSOLETE/MANUAL`） |
+| `GET /api/channels/{id}/outbox?status=&page=&pageSize=` | 出站事件分页（`PENDING/SENT/MANUAL`） |
+| `POST /api/channels/inbound/{eventId}/retry`、`POST /api/channels/outbox/{eventId}/retry` | 仅 `MANUAL` 事件可重新入队（否则 409 `RESERVATION_STATE`）；入队即从 0 重新计数 |
+| `POST /api/channels/{id}/process-now` | `{inboundLimit?,outboxLimit?}`（≤200）；入站按"连接 → 供应商序号 → 事件 id"有序领取，序号低于已结算水位记 `OBSOLETE` 事实不应用；出站按 id 有序领取，`PAUSED/BLOCKED_EXTERNAL` 连接跳过投递 |
+| `POST /api/channels/{id}/reconcile`、`GET /api/channels/{id}/reconciliations` | 拉取供应商快照与本地渠道订单按外部单号比对：`checked/missingLocal/missingRemote/mismatch` 计数与差异明细落 `reconciliation_runs` |
+
+入站处理语义：`ORDER_CREATE` 经共享 `ReservationService` 建单（来源 OTA、默认即确认）→ 出站 `RESERVATION_CREATED` + `RESERVATION_CONFIRMED`；`ORDER_MODIFY/CANCEL` 的出站事件由预订服务钩子按入站关联定位连接，拒绝跨渠道操作（外部单号不属于该连接即拒绝）。同一事件重放/重试使用确定性 UUID 幂等键，房量不足/映射缺失走与前台完全相同的错误码。
+
+重试与人工处理：失败退避 `attempts²×2s`（上限 600s），`MAX_ATTEMPTS=8` 后转 `MANUAL` 停止自动重试；每次尝试落 `sync_attempts`（追加只写，含耗时与简短原因；不含负载/电话等敏感值）。出站业务变更与 outbox 写入同一本地事务；外部 HTTP 推送在所有业务事务之外；后台工作器每 5s 数据库有序领取（`for update skip locked`）。
+
+主要错误码：`CALLBACK_SIGNATURE_INVALID`、`DUPLICATE_EVENT`、`CALLBACK_MALFORMED`、`CALLBACK_EVENT_TYPE`、`CREDENTIAL_UNRESOLVED`、`MAPPING_EXISTS`、`STALE_VERSION`、`RESERVATION_STATE`、`NOT_FOUND`、`VALIDATION_ERROR`。

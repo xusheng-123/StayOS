@@ -21,8 +21,10 @@ public class InventoryService {
     private final IdempotencyService requests;
     private final BusinessActorGuard actors;
     private final AuditService audit;
-    public InventoryService(ReservationMapper inventory,IdempotencyService requests,BusinessActorGuard actors,AuditService audit) {
-        this.inventory=inventory;this.requests=requests;this.actors=actors;this.audit=audit;
+    private final com.stayos.integration.ChannelOutboxRecorder channelOutbox;
+    public InventoryService(ReservationMapper inventory,IdempotencyService requests,BusinessActorGuard actors,AuditService audit,
+        com.stayos.integration.ChannelOutboxRecorder channelOutbox) {
+        this.inventory=inventory;this.requests=requests;this.actors=actors;this.audit=audit;this.channelOutbox=channelOutbox;
     }
 
     @Transactional(readOnly=true)
@@ -73,6 +75,11 @@ public class InventoryService {
         var row=new BlockRow();
         row.roomTypeId=input.roomTypeId(); row.startDate=start; row.endDate=end; row.reason=reason; row.createdBy=actor;
         if(inventory.insertBlock(row)!=1) throw new IllegalStateException("Inventory block was not saved");
+        var saved=inventory.blockById(row.id);
+        channelOutbox.recordInventoryBlock(row.id,"INVENTORY_BLOCKED",Map.of(
+            "blockId",row.id,"roomTypeId",row.roomTypeId,
+            "typeCode",saved==null||saved.roomTypeCode==null?"":saved.roomTypeCode,
+            "startDate",start.toString(),"endDate",end.toString(),"reason",reason));
         audit.success(actor,"INVENTORY_BLOCK_CREATE","INVENTORY",row.id);
         requests.completeBlock(actor,"INVENTORY_BLOCK_CREATE",key,row.id);
         return blockView(inventory.blockById(row.id));
@@ -85,6 +92,12 @@ public class InventoryService {
         if(inventory.lockBlock(id)==null) throw new ApiException(404,"BLOCK_NOT_FOUND","停售区间不存在");
         var now=OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         if(inventory.releaseBlock(id,actor,now)!=1) throw new ApiException(409,"BLOCK_STATE","该停售区间已解除");
+        var released=inventory.blockById(id);
+        channelOutbox.recordInventoryBlock(id,"INVENTORY_RELEASED",Map.of(
+            "blockId",id,"roomTypeId",released==null?0:released.roomTypeId,
+            "typeCode",released==null||released.roomTypeCode==null?"":released.roomTypeCode,
+            "startDate",released==null?"":released.startDate.toString(),
+            "endDate",released==null?"":released.endDate.toString(),"reason",""));
         audit.success(actor,"INVENTORY_BLOCK_RELEASE","INVENTORY",id);
         requests.completeBlock(actor,"INVENTORY_BLOCK_RELEASE",key,id);
         return blockView(inventory.blockById(id));

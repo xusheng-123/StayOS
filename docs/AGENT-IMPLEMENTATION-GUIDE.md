@@ -560,9 +560,9 @@ git diff --check
 | V2.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r1：JUnit 420、账务浏览器 4 项全通过及构建打包；V2.0-DELIVERY.md |
 | V2.1 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r1：JUnit 447、12 套浏览器 134 项全通过（含收银 1 项）及构建打包；V2.1-DELIVERY.md |
 | V3.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署 | r2：JUnit 482、浏览器 14 套 148 项全通过（auth 1 项波动经 r3 重跑通过）及构建打包；V3.0-DELIVERY.md |
-| V4.0 | WAITING_DEPENDENCY | 等 V3.0；再核实渠道条件 | 本文第 14 节 |
+| V4.0 | VERIFIED_LOCAL | HANDOFF；本版完成，未部署；真实供应商接入另需条件 | r1：JUnit 498、浏览器 15 套 150 项全通过（一次通过无重跑）、前后端构建打包；V4.0-DELIVERY.md |
 | V4.1/V4.2 | DEFERRED | 直订/真实支付需明确启用及供应商 | 本文第 15 节 |
-| V5.0 | WAITING_DEPENDENCY | 主线至 V4.0 后选择经营闭环 | 本文第 16 节 |
+| V5.0 | WAITING_DEPENDENCY | 主线已至 V4.0；等用户授权并选择经营闭环 | 本文第 16 节 |
 | V6.0 | DEFERRED | 实际第二店/SaaS 目标后安排 | 本文第 17 节 |
 
 ### 本版工作卡模板
@@ -585,13 +585,14 @@ git diff --check
 
 ## 21. 最近交接记录
 
-### 2026-11-01：V3.0 预订与未来库存完成并提交 Git
+### 2026-11-01：V4.0 首个获授权渠道连接完成并提交 Git
 
-- 经用户授权"去做V3.0"，按第 13 节完成全部阶段；V2.1 详细交接移至 `docs/releases/V2.1-DELIVERY.md`（2026-11-01 用户授权"推做完的版本"，V2.1 `e8d8df2` 与本版 `51c9591` 已同批推送远程）。迁移 V18 新增 4 张表：`reservations`（状态机 HELD→CONFIRMED→CHECKED_IN、旁路 CANCELLED/NO_SHOW，触发器白名单迁移）、`reservation_events`（只追加）、`inventory_days`（(room_type_id,stay_date) 唯一、sold>=0）、`inventory_blocks`（房型级停售 [start,end)、一次性解除）；`payment_records` 补 `reservation_id`，附件 CHECK 改"客账或预订二选一"，触发器由只追加改为三件套（V2.0 插入校验 + guard 仅放行开账挂订金 + no_delete），计数 2→3；幂等表扩 2 结果列与 12 个 RESERVATION/INVENTORY 操作；`deploy/runtime-grants.sql` 同步；权限 `reservation:manage`（前台、总经理）、`inventory:manage`（仅总经理），订金退款沿用 `billing:refund`（仅总经理）；审计新增 RESERVATION 模块 12 动作。
-- 核心规则：`[到店, 离店)` 半开区间（至少一晚、最长 365 晚），到店日不早于当前营业日；可售 = `blocked>0 ? 0 : 启用房 − 在住 − 售出`，在住与售出同口径按营业日夜晚统计，预订转入住先释放 sold 再转在住段、同一夜晚不双扣；占满夜晚的创建/修改具名 `ROOM_TYPE_SOLD_OUT` 默认禁止超卖；修改同事务先按房型 id 升序锁旧+新夜晚再释放→核验→占用→版本乐观锁，任一步失败整体回滚原库存不变；保留单到期 `release-expired` 扫描释放（锁批 200、天然幂等）；订金收退复用 V2 真实资金记录（收 `billing:receive`、退 `billing:refund` 且不超原笔未退与余额，REFUND 行 purpose 须空），开立客账时未挂账订金单次迁移至 folio（guard 触发器只放行这一种 UPDATE，reservation_id 双关联保留追溯）；取消罚金首版固定 0.00 如实记录；12 个写操作全幂等（canonical 取原始请求串）；联系人电话可选、AES-GCM 加密保存仅回掩码。
-- 关键修复（实测发现）：可选电话未填时掩码列显式 NULL 撞 NOT NULL（改存空串）；幂等 canonical 混入服务端计算的 heldUntil 致回放 MISMATCH（改携原始串）；取消后全额退款被 `payment_records_check` 拒（REFUND 行 purpose 须空，去掉 mapper 硬编码 'DEPOSIT'）；`/modify` 控制器映射遗漏 404；MyBatis 多参数下 modify 脚本缺 `row.` 前缀；`ApiErrors` 对 DIVE 的通用 409 掩盖根因（临时诊断日志定位后移除）；房间默认 DIRTY（用例先置 CLEAN）；测试侧 bookable 语义修正为 min(available)；r1 全量回归暴露遗留测试未跟上触发器替换——Billing/CashierIntegrationTest 清库仍禁用已删除的 `payment_records_append_only`（改为 guard+no_delete，其 @BeforeAll 失败遗留 folio_charges_append_only 禁用态连带 CHARGE_DELETE 误报）、CashierSchemaTest V16→HEAD 迁移数断言 1→2。
-- 有效验收证据：`.local/releases/V3.0/20261031-235925/`（r2 全量：JUnit 482 项 481 绿，唯一失败为 auth 浏览器 1 项环境性登录页 30 秒超时——前端自 r1 起零改动，r3 单独重跑 22/22 通过；浏览器 14 套 148 项全通过 0 unexpected，含新增 reservations.spec.ts 1 项；四类门禁 61 项；首轮失败日志 `test-full-r1-failed.log` 原样保留）。当前最高迁移 V18，下一号 V19。
-- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V3.0 接口与表结构；详细交接见 `docs/releases/V3.0-DELIVERY.md`。下一行动：V4.0 等用户明确授权并核实渠道条件后从第 14 节开始；V1.4/V4.x/V6.0 保持 DEFERRED。
+- 经用户授权"去做V4.0"，按第 14 节完成全部阶段；V3.0 详细交接移至 `docs/releases/V3.0-DELIVERY.md`（V2.1 `e8d8df2`、V3.0 `51c9591` 已经用户授权推送远程）。供应商条件如实核实：用户未指定首个真实供应商，无接口权限/正式文档/沙箱账号 → 走第 14 节回退路径，完成供应商无关核心 + adapter SPI + 受控模拟供应商 `SIMULATOR`（HMAC-SHA256 签名回调 + 内存台账回显推送），真实供应商保持 `BLOCKED_EXTERNAL`，不宣称任何真实渠道端到端集成通过。
+- 迁移 V19 新增 6 张表：`channel_connections`（凭据/回调密钥只存引用名，状态含 ACTIVE/PAUSED/BLOCKED_EXTERNAL，乐观锁 `version`）、`channel_mappings`（渠道编码↔本地房型/价格计划，双唯一）、`inbound_events`（(connection, external_event_id) 唯一、每连接序号协议、PENDING 部分索引、result_reservation_id 追溯）、`outbox_events`（7 类事件、SENT/sent_at 一致性 CHECK）、`sync_attempts`（追加只写流水，grants 不授 UPDATE/DELETE）、`reconciliation_runs`（RUNNING/finished_at 一致性 CHECK、差异 JSONB）；`deploy/runtime-grants.sql` 同步；权限 `channel:manage`（仅总经理）；审计新增 CHANNEL 模块 9 动作。
+- 核心规则：入站"先持久化后处理"——签名失败 401 不落任何内容、重复 409 `DUPLICATE_EVENT`、乱序记 `OBSOLETE` 事实（每连接已结算序号水位）、坏负载 400；`ORDER_CREATE/MODIFY/CANCEL` 全部经共享 `ReservationService`（幂等键为事件身份派生 `UUID.nameUUIDFromBytes`；拒绝跨渠道操作他人预订）；PRICE_UPDATE 只落事实不自动改价（V4.x 条件版）；失败退避 attempts²×2s（上限 600s）、`MAX_ATTEMPTS=8` 转 `MANUAL` 等人工重试；出站按 id 有序领取（`for update skip locked`、Worker 每 5s）、`PAUSED/BLOCKED_EXTERNAL` 跳过、推送在业务事务外；柜台预订确认/修改/取消经 `ChannelOutboxRecorder`（`@Transactional(MANDATORY)` 与业务同事务）自动入队，无渠道出身的操作不入队；对账按外部单号比对本地/远端差异落明细；回调路径免登录但受每连接密钥签名保护，CSRF 仅对回调精确豁免（全局不关闭）；凭据引用经 `CredentialResolver`（系统属性→环境变量→Spring Environment）解析，不可解析 409，密钥值不入库不进日志/审计，错误文本经 `briefCause` 截断不含负载值与 PII。
+- 关键修复（实测发现）：幂等表仅收 UUID，直接拼事件键被拒（改派生 UUID）；`ORDER_CREATE` 的 CONFIRMED 出站须在 applyInbound 显式补发（`result_reservation_id` 在事件事务后才落库，MODIFY/CANCEL 交给服务钩子避免重复入队）；`recordReservationEvent` 用 `queryForList`（原 `queryForObject` 会让无渠道出身的柜台操作 500）；MyBatis 动态 SQL claim 查询补 `<script>` 包裹；JSONB 边界统一"字符串进、`::text` 出"（`JsonNode` 直接绑定失败）；`channel_connections` 冻结前补 `version` 列（测试库重放）；连接/映射四个写动作补 `audit.success`（浏览器验收暴露）；测试清库 FK 顺序（幂等→渠道表→预订→房间→用户）。
+- 有效验收证据：`.local/releases/V4.0/20261101-1043/`（r1 全量 `test.ps1 -Browser` 一次通过无重跑：JUnit 498 项 0 失败 0 错误 0 跳过，含 `ChannelSchemaTest` 8、`ChannelIntegrationTest` 8；浏览器 15 套 150 项全通过 0 unexpected，含新增 channels.spec.ts 2 项；前后端构建打包通过；`git diff --check` 干净）。当前最高迁移 V19，下一号 V20。
+- `docs/API.md`、`docs/DATABASE.md` 已完整登记 V4.0 接口与表结构；详细交接见 `docs/releases/V4.0-DELIVERY.md`。下一行动：V4.1/V4.2（直订/真实支付）保持 DEFERRED，待用户明确启用与供应商条件；V5.0 等用户授权并选择经营闭环范围；本版只提交本地 Git，推送远程需用户单独授权。
 
 后续交接每次替换“最近记录”，较早详细记录放对应 `docs/releases/`；不删除原始验收证据。
 
